@@ -1,0 +1,226 @@
+# Project Status and Resume Notes
+
+## Current status
+This project is now in the implementation baseline phase. The app foundation has been created, the PWA structure is configured, and the local offline note model is in place.
+
+### Recent update
+- React + TypeScript project scaffolded in the workspace
+- required frontend dependencies installed
+- Vite PWA configuration added for installable web app behavior
+- mobile-first note interface created
+- IndexedDB-based offline note storage introduced
+- typed note and queue models created for future sync expansion
+- Supabase client setup created with persistent session config
+- local Supabase environment config present and the notes REST endpoint responded successfully to a no-data connectivity check
+- Supabase auth session restore now reports failures and correctly cleans up its auth-state subscription
+- sign-up explains when email confirmation is required, and sign-out errors are surfaced
+- auth-ready login screen added for cloud and demo mode fallback
+- user-scoped note loading logic added to prepare for multi-account behavior
+- Supabase schema SQL prepared for profiles, notes, notebooks, tags, reminders, attachments, and sync queue
+- note editing flow debugged and fixed to prevent stale queued saves from overwriting live typing text
+- stale draft/version guard implemented so older save snapshots no longer replace newer note content
+- note writes and sync-queue entries are saved in one IndexedDB transaction
+- authenticated sync pulls remote notes, uploads the latest local note per queue, and retries failed writes on the next sync
+- timestamp/version conflict resolution and per-user sync serialization are implemented
+- sync status reflects pending and failed uploads instead of claiming they already reached the cloud
+- app build verified successfully after the final sync stability fix
+- local dev server started for testing
+- manual browser check confirmed the app loads and the notes editor remains stable while typing
+- persistent dark/light theme toggle added and verified in the browser
+- production deployment checklist added, covering Vercel configuration, Supabase environment variables, RLS inspection, account-isolation testing, and post-deployment checks
+- workspace is not currently a Git repository, so a Git-based Vercel deployment requires connecting/pushing it to the intended provider first
+
+### Confirmed direction
+- Build as a PWA website, not a native app
+- Mobile-first experience with desktop compatibility
+- Offline-first architecture
+- Local IndexedDB storage for immediate offline note saving
+- Cloud sync using Supabase when internet is available
+- Persistent login sessions for each user
+- User-scoped notes to prevent mixing across accounts
+- Free or low-cost managed hosting using Vercel + Supabase
+
+### Architecture chosen
+- Frontend: React + Vite + TypeScript
+- Offline storage: IndexedDB + Dexie
+- App shell caching: Service Worker / Workbox
+- Auth: Supabase Auth
+- Database: Supabase Postgres
+- Hosting: Vercel
+
+### Core design decisions
+- Cloud database is the source of truth
+- Local browser database is an offline cache and local working copy
+- Each note has a stable ID and user_id
+- Notes are synced through a queue when online
+- The schema supports future additions like folders, tags, reminders, attachments, etc.
+
+---
+
+## Current milestone
+### Completed
+- requirement discussion
+- product goals clarified
+- architecture chosen
+- offline-first concept approved
+- sync model defined
+- user model defined
+- future feature growth plan defined
+- project blueprint document written
+- project status document created and updated
+- React app scaffolded
+- frontend dependencies installed
+- PWA foundation added
+- local IndexedDB note model implemented
+- app-level note model and type definitions created
+- Supabase client initialized for future auth/database integration
+- Supabase notes endpoint reachability checked without reading note data
+- pending note sync scoped to the signed-in user and failed writes remain queued for retry
+- auth session lifecycle cleanup and email-confirmation feedback implemented
+- local queue upload and remote pull wired into startup, note changes, and reconnect flows
+- offline queue retries and conflict resolution implemented
+- initial mobile-first notes editor UI built
+- auth-ready login flow and demo fallback added
+- Supabase schema design created for real cloud tables
+- stale-draft overwrite bug fixed in the note editor
+- version/timestamp guard added to prevent background saves from replacing newer content
+- build verification passed after final stability fix
+- dev server launched successfully and app checked in browser
+- persistent dark/light theme toggle implemented and browser-checked
+- production deployment checklist documented in `docs/deployment-checklist.md`
+
+### Not started yet
+- end-to-end offline/reconnect sync verification with an authenticated account
+- login persistence verification after closing and reopening the app
+- confirmation that production Row Level Security policies are enabled and correct in the live Supabase project
+- production Vercel environment configuration and deployment
+- cross-account isolation verification against two authorized test accounts
+- mobile and desktop testing on real devices
+- final feature roadmap implementation
+- note sharing and collaboration features
+
+---
+
+## Important project rules to preserve
+1. Keep the app as a PWA website, not a native app.
+2. Every note must be tied to a user_id.
+3. Local storage is only for offline/local working data.
+4. Cloud is the source of truth.
+5. Use a sync queue for unsynced notes.
+6. Keep the note schema extensible.
+7. Avoid building with a fragile one-table-only design.
+8. Do not depend on the laptop being always online.
+9. Persistent login should be enabled.
+10. The app must work on iPhone, Android, and Windows.
+
+---
+
+## Recommended next implementation steps
+### Step 1: initialize project
+- create React + Vite + TypeScript app
+- install required dependencies
+- set up app routing and basic layout
+
+### Step 2: configure PWA
+- add manifest file
+- add service worker
+- enable installability on mobile/desktop
+
+### Step 3: set up Supabase
+- create project
+- configure auth
+- create database tables
+- configure Row Level Security
+
+### Step 4: implement local database
+- create IndexedDB schema
+- create Dexie models
+- add note CRUD local operations
+
+### Step 5: implement auth session persistence
+- persist user session
+- restore on app open
+- silent refresh behavior
+
+### Step 6: implement sync engine
+- queue unsynced actions
+- upload when online
+- retry on reconnect
+- resolve conflicts
+
+### Step 7: build note UI
+- notes list
+- editor
+- create/edit/delete flows
+- offline indicator
+- mobile-first layout
+
+### Step 8: test and polish
+- offline create and edit
+- reconnect sync
+- reinstall / re-login flow
+- cross-browser testing
+
+---
+
+## Data model snapshot
+### User table
+- id
+- email
+- display_name
+- created_at
+
+### Note table
+- id
+- user_id
+- title
+- content
+- content_type
+- created_at
+- updated_at
+- version
+- deleted_at
+- is_archived
+- is_pinned
+- notebook_id
+- color
+- metadata_json
+
+### Sync queue table
+- id
+- user_id
+- note_id
+- action
+- payload
+- created_at
+- processed_at
+
+---
+
+## Resume guidance
+When resuming this project later, continue from the architecture stage and build in the following order:
+1. scaffold app
+2. set up PWA and service worker
+3. set up Supabase auth and database
+4. add IndexedDB local model
+5. add note sync engine
+6. build note UI
+7. test on mobile and desktop
+
+This is the correct path so the app stays consistent with the design decisions already made.
+
+---
+
+## Open questions / to decide later
+- Should notebooks/folders be included from the first release or added after MVP?
+- Do we need markdown support in v1 or v2?
+- Should we allow note deletion to be soft-deleted first?
+- Do we need note tags from the beginning?
+- Should reminders be included in v1 or moved to v2?
+
+---
+
+## Final note
+The project has an implemented local-first sync path: local note changes and queue records are persisted atomically, authenticated sync pulls and uploads user-scoped notes, failed uploads remain queued, and timestamp/version comparisons resolve conflicts. Production build passes. A real authenticated offline/reconnect test on two devices is still needed to verify the complete cloud round trip.
+
+This document should be treated as the active project state file and updated whenever the project progresses.
