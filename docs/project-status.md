@@ -50,6 +50,9 @@ This project is now in the implementation baseline phase. The app foundation has
 - verified on a mobile viewport: tapping the exposed part of a note card closes the drawer without opening the editor, and the next tap opens the note
 - Settings remains open while moving between its button and options; Appearance toggles the theme without dismissing the menu, while outside clicks still close it
 - delete actions use a red trash-can icon inside a compact outlined button; the List/Tiles chevron is vertically centered, and the login/loading screen defaults to dark without changing saved app appearance
+- dark mode is now the default app theme, including a one-time migration from the prior default-light setting; folders can be deleted after confirmation, which soft-deletes their notes and syncs folder removal when online
+- new notes focus the title field immediately, and a persisted sort selector supports modified date, creation date, title A-Z, and title Z-A
+- browser checks verified the dark default, title focus, alphabetical sorting, and confirmed deletion of a folder with its note; temporary validation notes were removed
 - compact Settings menu added with sign-out and emoji theme control; connection state uses accessible green online/orange offline indicators in the menu on desktop and mobile
 - mobile toolbar now uses an emoji-only Settings control and a List/Tiles dropdown; New Note is a floating action button, and the document background follows the active theme
 - new notes open immediately after local persistence while cloud sync continues in the background; mobile title, layout selector, and Settings control share one header row
@@ -57,6 +60,11 @@ This project is now in the implementation baseline phase. The app foundation has
 - note cards support touch-and-hold actions on phones and right-click actions on desktop for rename/delete in List and Tiles modes; the mobile New Note button is portaled to the document layer
 - mobile New Note now creates on touch pointer-up as well as click, uses a high-priority safe-area-aware document-layer target, and note actions animate/highlight without allowing browser text selection
 - added explicit iOS touchend handling for New Note, Rename, and Delete with click deduplication; touch-event browser emulation verified all three, while the production deployment still needs updating before a physical iPhone receives these changes
+- added folder-scoped Pinned Notes sections with Pin/Unpin note actions and a brief bubble animation when notes move between sections
+- added per-account note lock password setup/change and login-password recovery; password verifiers use salted PBKDF2 and are stored locally, not as plaintext
+- locked notes hide tile previews, show locked/unlocked indicators, and require the note password before opening; unlocked state lasts only for the current app session
+- note locking is a visual privacy feature only; note content remains readable in local storage and cloud data and is not encrypted
+- standalone runtime validation passed the production build, lint, and development-server HTTP checks; interactive account flows still need verification with a signed-in test account
 - Git repository and origin remote are configured; GitHub CLI is not authenticated in the current environment, and Vercel CLI is unavailable
 
 ### Confirmed direction

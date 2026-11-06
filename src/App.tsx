@@ -3,14 +3,27 @@ import { createPortal } from 'react-dom'
 
 import './App.css'
 import { db, seedDefaultSettings } from './lib/db'
+import {
+  createNoteLockCredential,
+  type NoteLockCredential,
+  verifyNoteLockPassword,
+} from './lib/note-lock'
 import { isSupabaseConfigured, normaliseSupabaseUser, supabase, type AppUser } from './lib/supabase'
-import { saveNoteLocally, syncUserNotes } from './lib/sync'
+import { deleteNotebookLocally, saveNoteLocally, syncUserNotes } from './lib/sync'
 import type { Notebook, Note } from './types'
 
 const DEMO_USER_ID = 'demo-user'
 const DEMO_USER_NAME = 'Demo user'
 type ThemeMode = 'light' | 'dark'
 type NoteViewMode = 'list' | 'grid'
+type NoteSortMode = 'modified' | 'created' | 'name-asc' | 'name-desc'
+type NoteLockDialogMode = 'create' | 'change' | 'recover'
+type NoteMenuAction = 'rename' | 'delete' | 'pin' | 'lock'
+type NoteLockActionState = {
+  noteId: string
+  mode: 'lock' | 'unlock'
+  openAfterUnlock: boolean
+}
 type NoteMenuState = {
   noteId: string
   x: number
@@ -69,8 +82,9 @@ function TrashIcon() {
 
 function App() {
   const [currentUser, setCurrentUser] = useState<AppUser | null>(null)
-  const [theme, setTheme] = useState<ThemeMode>('light')
+  const [theme, setTheme] = useState<ThemeMode>('dark')
   const [noteViewMode, setNoteViewMode] = useState<NoteViewMode>('list')
+  const [noteSortMode, setNoteSortMode] = useState<NoteSortMode>('modified')
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [navigationOpen, setNavigationOpen] = useState(false)
   const [hasFolderOverflow, setHasFolderOverflow] = useState(false)
@@ -85,6 +99,19 @@ function App() {
   const [authError, setAuthError] = useState<string | null>(null)
   const [authNotice, setAuthNotice] = useState<string | null>(null)
   const [noteActionError, setNoteActionError] = useState<string | null>(null)
+  const [unlockedNoteIds, setUnlockedNoteIds] = useState<Set<string>>(new Set())
+  const [animatingNoteIds, setAnimatingNoteIds] = useState<Set<string>>(new Set())
+  const [noteLockConfigured, setNoteLockConfigured] = useState(false)
+  const [noteLockDialogMode, setNoteLockDialogMode] = useState<NoteLockDialogMode | null>(null)
+  const [noteLockOldPassword, setNoteLockOldPassword] = useState('')
+  const [noteLockNewPassword, setNoteLockNewPassword] = useState('')
+  const [noteLockConfirmPassword, setNoteLockConfirmPassword] = useState('')
+  const [noteLockDialogError, setNoteLockDialogError] = useState<string | null>(null)
+  const [noteLockSaving, setNoteLockSaving] = useState(false)
+  const [noteLockAction, setNoteLockAction] = useState<NoteLockActionState | null>(null)
+  const [noteLockActionPassword, setNoteLockActionPassword] = useState('')
+  const [noteLockActionError, setNoteLockActionError] = useState<string | null>(null)
+  const [noteLockRecoveryVerified, setNoteLockRecoveryVerified] = useState(false)
   const [noteMenu, setNoteMenu] = useState<NoteMenuState | null>(null)
   const [renamingNoteId, setRenamingNoteId] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')
@@ -108,12 +135,15 @@ function App() {
   const settingsMenuRef = useRef<HTMLDetailsElement | null>(null)
   const navigationDrawerRef = useRef<HTMLElement | null>(null)
   const navigationScrollRef = useRef<HTMLDivElement | null>(null)
+  const noteTitleInputRef = useRef<HTMLInputElement | null>(null)
+  const noteSectionAnimationTimers = useRef<Map<string, number>>(new Map())
   const longPressOriginRef = useRef<{ x: number; y: number } | null>(null)
   const suppressNewNoteClickRef = useRef(false)
   const suppressNewNoteClickTimerRef = useRef<number | null>(null)
   const suppressMenuClickRef = useRef(false)
   const suppressMenuClickTimerRef = useRef<number | null>(null)
   const themeClassName = theme === 'dark' ? 'theme-dark' : 'theme-light'
+  const currentUserId = currentUser?.id ?? null
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme
@@ -125,8 +155,8 @@ function App() {
   const openNoteMenu = (noteId: string, x: number, y: number) => {
     setNoteMenu({
       noteId,
-      x: Math.max(8, Math.min(x, window.innerWidth - 188)),
-      y: Math.max(8, Math.min(y, window.innerHeight - 108)),
+      x: Math.max(8, Math.min(x, window.innerWidth - 208)),
+      y: Math.max(8, Math.min(y, window.innerHeight - 208)),
     })
   }
 
@@ -199,6 +229,8 @@ function App() {
       if (event.key === 'Escape') {
         setNoteMenu(null)
         setRenamingNoteId(null)
+        setNoteLockDialogMode(null)
+        setNoteLockAction(null)
         setNavigationOpen(false)
         setSettingsOpen(false)
       }
@@ -221,6 +253,9 @@ function App() {
       if (suppressOutsideNoteClickTimerRef.current !== null) {
         window.clearTimeout(suppressOutsideNoteClickTimerRef.current)
       }
+      for (const timer of noteSectionAnimationTimers.current.values()) {
+        window.clearTimeout(timer)
+      }
     }
   }, [])
 
@@ -231,13 +266,21 @@ function App() {
       await seedDefaultSettings()
 
       const storedTheme = await db.settings.get('ui-theme')
-      const nextTheme = storedTheme?.value === 'dark' ? 'dark' : 'light'
+      const nextTheme = storedTheme?.value === 'light' ? 'light' : 'dark'
       const storedViewMode = await db.settings.get('note-view-mode')
       const nextViewMode = storedViewMode?.value === 'grid' ? 'grid' : 'list'
+      const storedSortMode = await db.settings.get('note-sort-mode')
+      const sortModes: NoteSortMode[] = ['modified', 'created', 'name-asc', 'name-desc']
+      const nextSortMode =
+        typeof storedSortMode?.value === 'string' &&
+        sortModes.includes(storedSortMode.value as NoteSortMode)
+          ? storedSortMode.value as NoteSortMode
+          : 'modified'
 
       if (active) {
         setTheme(nextTheme)
         setNoteViewMode(nextViewMode)
+        setNoteSortMode(nextSortMode)
       }
     }
 
@@ -247,6 +290,60 @@ function App() {
       active = false
     }
   }, [])
+
+  useEffect(() => {
+    let active = true
+    setUnlockedNoteIds(new Set())
+    setNoteLockConfigured(false)
+    setNoteLockDialogMode(null)
+    setNoteLockAction(null)
+    setNoteLockRecoveryVerified(false)
+
+    if (!currentUserId) {
+      return () => {
+        active = false
+      }
+    }
+
+    const loadLockSettings = async () => {
+      try {
+        const setting = await db.settings.get(`note-lock-password:${currentUserId}`)
+        if (!setting) {
+          return
+        }
+        if (typeof setting.value !== 'string') {
+          throw new Error('Stored note-lock password settings are invalid.')
+        }
+        const credential: unknown = JSON.parse(setting.value)
+        if (
+          !credential ||
+          typeof credential !== 'object' ||
+          !('salt' in credential) ||
+          !('hash' in credential) ||
+          typeof credential.salt !== 'string' ||
+          typeof credential.hash !== 'string'
+        ) {
+          throw new Error('Stored note-lock password settings are invalid.')
+        }
+        if (active) {
+          setNoteLockConfigured(true)
+        }
+      } catch (error) {
+        console.error('Unable to load note-lock settings', error)
+        if (active) {
+          setNoteLockDialogError(
+            error instanceof Error ? error.message : 'Unable to load note-lock settings.',
+          )
+        }
+      }
+    }
+
+    void loadLockSettings()
+
+    return () => {
+      active = false
+    }
+  }, [currentUserId])
 
   useEffect(() => {
     let active = true
@@ -418,8 +515,29 @@ function App() {
   }, [navigationOpen, folders.length, expandedFolderIds, isCreatingFolder, activeNotes.length])
 
   const visibleNotes = useMemo(
-    () => activeNotes.filter((note) => note.notebook_id === selectedFolderId),
-    [activeNotes, selectedFolderId],
+    () => activeNotes
+      .filter((note) => note.notebook_id === selectedFolderId)
+      .sort((a, b) => {
+        if (noteSortMode === 'created') {
+          return b.created_at.localeCompare(a.created_at)
+        }
+        if (noteSortMode === 'name-asc') {
+          return a.title.localeCompare(b.title, undefined, { sensitivity: 'base' })
+        }
+        if (noteSortMode === 'name-desc') {
+          return b.title.localeCompare(a.title, undefined, { sensitivity: 'base' })
+        }
+        return b.updated_at.localeCompare(a.updated_at)
+      }),
+    [activeNotes, selectedFolderId, noteSortMode],
+  )
+  const pinnedNotes = useMemo(
+    () => visibleNotes.filter((note) => note.is_pinned),
+    [visibleNotes],
+  )
+  const regularNotes = useMemo(
+    () => visibleNotes.filter((note) => !note.is_pinned),
+    [visibleNotes],
   )
 
   const folderNameById = useMemo(
@@ -438,8 +556,14 @@ function App() {
   }, [activeNotes])
 
   const selectedNote = useMemo(
-    () => activeNotes.find((note) => note.id === selectedId) ?? null,
-    [activeNotes, selectedId],
+    () => {
+      const note = activeNotes.find((candidate) => candidate.id === selectedId) ?? null
+      return note &&
+        (note.metadata_json.note_locked !== true || unlockedNoteIds.has(note.id))
+        ? note
+        : null
+    },
+    [activeNotes, selectedId, unlockedNoteIds],
   )
 
   useEffect(() => {
@@ -459,6 +583,16 @@ function App() {
     } else {
       setDraftTitle('')
       setDraftContent('')
+    }
+  }, [selectedId])
+
+  useEffect(() => {
+    if (selectedId) {
+      noteTitleInputRef.current?.focus()
+      noteTitleInputRef.current?.setSelectionRange(
+        noteTitleInputRef.current.value.length,
+        noteTitleInputRef.current.value.length,
+      )
     }
   }, [selectedId])
 
@@ -487,6 +621,15 @@ function App() {
     setNoteViewMode(nextMode)
     await db.settings.put({
       key: 'note-view-mode',
+      value: nextMode,
+      updated_at: new Date().toISOString(),
+    })
+  }
+
+  const handleNoteSortModeChange = async (nextMode: NoteSortMode) => {
+    setNoteSortMode(nextMode)
+    await db.settings.put({
+      key: 'note-sort-mode',
       value: nextMode,
       updated_at: new Date().toISOString(),
     })
@@ -534,6 +677,293 @@ function App() {
       notesRef.current = nextNotes
       return nextNotes
     })
+  }
+
+  const getNoteLockCredential = async (): Promise<NoteLockCredential | null> => {
+    if (!currentUser) {
+      return null
+    }
+
+    const setting = await db.settings.get(`note-lock-password:${currentUser.id}`)
+    if (!setting) {
+      return null
+    }
+    if (typeof setting.value !== 'string') {
+      throw new Error('Stored note-lock password settings are invalid.')
+    }
+
+    const credential: unknown = JSON.parse(setting.value)
+    if (
+      !credential ||
+      typeof credential !== 'object' ||
+      !('salt' in credential) ||
+      !('hash' in credential) ||
+      typeof credential.salt !== 'string' ||
+      typeof credential.hash !== 'string'
+    ) {
+      throw new Error('Stored note-lock password settings are invalid.')
+    }
+    return {
+      salt: credential.salt,
+      hash: credential.hash,
+    }
+  }
+
+  const triggerNoteMoveAnimation = (noteId: string) => {
+    const existingTimer = noteSectionAnimationTimers.current.get(noteId)
+    if (existingTimer !== undefined) {
+      window.clearTimeout(existingTimer)
+    }
+    setAnimatingNoteIds((current) => new Set(current).add(noteId))
+    const timer = window.setTimeout(() => {
+      setAnimatingNoteIds((current) => {
+        const next = new Set(current)
+        next.delete(noteId)
+        return next
+      })
+      noteSectionAnimationTimers.current.delete(noteId)
+    }, 650)
+    noteSectionAnimationTimers.current.set(noteId, timer)
+  }
+
+  const updateNoteMetadata = async (
+    target: Note,
+    changes: { isPinned?: boolean; isLocked?: boolean },
+  ) => {
+    const latestTarget = notesRef.current.find((note) => note.id === target.id) ?? target
+    const updatedNote: Note = {
+      ...latestTarget,
+      is_pinned: changes.isPinned ?? latestTarget.is_pinned,
+      metadata_json:
+        changes.isLocked === undefined
+          ? latestTarget.metadata_json
+          : { ...latestTarget.metadata_json, note_locked: changes.isLocked },
+      updated_at: new Date().toISOString(),
+      version: latestTarget.version + 1,
+      sync_status: 'pending',
+    }
+
+    await saveNoteLocally(updatedNote, 'update')
+    const nextNotes = notesRef.current
+      .map((note) => (note.id === updatedNote.id ? updatedNote : note))
+      .sort((a, b) => b.updated_at.localeCompare(a.updated_at))
+    notesRef.current = nextNotes
+    setNotes(nextNotes)
+
+    if (navigator.onLine && isSupabaseConfigured && currentUser) {
+      void syncUserNotes(currentUser.id)
+    }
+    return updatedNote
+  }
+
+  const handleToggleNotePin = async (noteId: string) => {
+    const target = notesRef.current.find((note) => note.id === noteId)
+    if (!target) {
+      return
+    }
+
+    setNoteActionError(null)
+    try {
+      await updateNoteMetadata(target, { isPinned: !target.is_pinned })
+      triggerNoteMoveAnimation(noteId)
+    } catch (error) {
+      console.error('Unable to update note pin state', error)
+      setNoteActionError(
+        error instanceof Error ? error.message : 'Unable to update this note. Please try again.',
+      )
+    }
+    setNoteMenu(null)
+  }
+
+  const handleOpenNote = async (note: Note) => {
+    setNoteActionError(null)
+    if (note.metadata_json.note_locked === true && !unlockedNoteIds.has(note.id)) {
+      try {
+        const credential = await getNoteLockCredential()
+        if (!credential) {
+          setNoteActionError('Set a note lock password in Settings before unlocking notes.')
+          setNavigationOpen(true)
+          setSettingsOpen(true)
+          return
+        }
+        setNoteLockAction({
+          noteId: note.id,
+          mode: 'unlock',
+          openAfterUnlock: true,
+        })
+        setNoteLockActionPassword('')
+        setNoteLockActionError(null)
+        return
+      } catch (error) {
+        console.error('Unable to unlock note', error)
+        setNoteActionError(
+          error instanceof Error ? error.message : 'Unable to unlock this note.',
+        )
+        return
+      }
+    }
+    setSelectedId(note.id)
+  }
+
+  const handleToggleNoteLock = async (noteId: string) => {
+    const target = notesRef.current.find((note) => note.id === noteId)
+    if (!target) {
+      return
+    }
+
+    setNoteMenu(null)
+    setNoteActionError(null)
+    try {
+      const credential = await getNoteLockCredential()
+      if (!credential) {
+        setNoteActionError('Set a note lock password in Settings before locking notes.')
+        setNavigationOpen(true)
+        setSettingsOpen(true)
+        return
+      }
+
+      const isLocked = target.metadata_json.note_locked === true
+      setNoteLockAction({
+        noteId,
+        mode: isLocked && !unlockedNoteIds.has(noteId) ? 'unlock' : 'lock',
+        openAfterUnlock: false,
+      })
+      setNoteLockActionPassword('')
+      setNoteLockActionError(null)
+      if (selectedId === noteId) {
+        setSelectedId(null)
+      }
+    } catch (error) {
+      console.error('Unable to update note lock state', error)
+      setNoteActionError(
+        error instanceof Error ? error.message : 'Unable to update this note. Please try again.',
+      )
+    }
+  }
+
+  const handleNoteLockActionSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!noteLockAction) {
+      return
+    }
+
+    setNoteLockActionError(null)
+    try {
+      const credential = await getNoteLockCredential()
+      if (!credential) {
+        throw new Error('Set a note lock password in Settings before locking notes.')
+      }
+      if (!(await verifyNoteLockPassword(noteLockActionPassword, credential))) {
+        setNoteLockActionError('Wrong note lock password.')
+        return
+      }
+
+      const target = notesRef.current.find((note) => note.id === noteLockAction.noteId)
+      if (!target) {
+        throw new Error('This note is no longer available.')
+      }
+
+      if (noteLockAction.mode === 'unlock') {
+        setUnlockedNoteIds((current) => new Set(current).add(target.id))
+        if (noteLockAction.openAfterUnlock) {
+          setSelectedId(target.id)
+        }
+      } else {
+        await updateNoteMetadata(target, { isLocked: true })
+        setUnlockedNoteIds((current) => {
+          const next = new Set(current)
+          next.delete(target.id)
+          return next
+        })
+        if (selectedId === target.id) {
+          setSelectedId(null)
+        }
+      }
+      setNoteLockAction(null)
+      setNoteLockActionPassword('')
+    } catch (error) {
+      console.error('Unable to complete note lock action', error)
+      setNoteLockActionError(
+        error instanceof Error ? error.message : 'Unable to update this note.',
+      )
+    }
+  }
+
+  const openNoteLockDialog = (mode: NoteLockDialogMode) => {
+    setNoteLockDialogMode(mode)
+    setNoteLockOldPassword('')
+    setNoteLockNewPassword('')
+    setNoteLockConfirmPassword('')
+    setNoteLockDialogError(null)
+    setNoteLockRecoveryVerified(false)
+  }
+
+  const handleNoteLockSettingsSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!noteLockDialogMode || !currentUser) {
+      return
+    }
+
+    setNoteLockSaving(true)
+    setNoteLockDialogError(null)
+    try {
+      if (noteLockDialogMode === 'recover' && !noteLockRecoveryVerified) {
+        if (!isSupabaseConfigured || !supabase || currentUser.email === 'demo@local') {
+          setNoteLockDialogError(
+            'Password recovery is unavailable in demo mode. Set a new password while signed in to your account.',
+          )
+          return
+        }
+        const { error } = await supabase.auth.signInWithPassword({
+          email: currentUser.email,
+          password: noteLockOldPassword,
+        })
+        if (error) {
+          setNoteLockDialogError('Wrong login password.')
+          return
+        }
+        setNoteLockRecoveryVerified(true)
+        setNoteLockOldPassword('')
+        return
+      }
+
+      if (noteLockNewPassword.length < 8) {
+        setNoteLockDialogError('Use a password with at least 8 characters.')
+        return
+      }
+      if (noteLockNewPassword !== noteLockConfirmPassword) {
+        setNoteLockDialogError('The new passwords do not match.')
+        return
+      }
+
+      if (noteLockDialogMode === 'change') {
+        const existingCredential = await getNoteLockCredential()
+        if (!existingCredential) {
+          throw new Error('No note lock password is set for this account.')
+        }
+        if (!(await verifyNoteLockPassword(noteLockOldPassword, existingCredential))) {
+          setNoteLockDialogError('Wrong note lock password.')
+          return
+        }
+      }
+
+      const credential = await createNoteLockCredential(noteLockNewPassword)
+      await db.settings.put({
+        key: `note-lock-password:${currentUser.id}`,
+        value: JSON.stringify(credential),
+        updated_at: new Date().toISOString(),
+      })
+      setNoteLockConfigured(true)
+      setNoteLockDialogMode(null)
+      setNoteLockDialogError(null)
+    } catch (error) {
+      console.error('Unable to save note lock password', error)
+      setNoteLockDialogError(
+        error instanceof Error ? error.message : 'Unable to save the note lock password.',
+      )
+    } finally {
+      setNoteLockSaving(false)
+    }
   }
 
   const createNote = async (notebookId: string | null = selectedFolderId) => {
@@ -609,6 +1039,76 @@ function App() {
           )
         }
       })
+    }
+  }
+
+  const handleDeleteFolder = async (folderId: string) => {
+    const folder = folders.find((item) => item.id === folderId)
+    if (!folder) {
+      return
+    }
+
+    const folderNotes = notesRef.current.filter(
+      (note) => note.notebook_id === folderId && !note.deleted_at,
+    )
+    const noteDescription =
+      folderNotes.length === 1 ? '1 note' : `${folderNotes.length} notes`
+    const confirmation =
+      folderNotes.length > 0
+        ? `Delete "${folder.name}" and its ${noteDescription}? This cannot be undone.`
+        : `Delete "${folder.name}"? This cannot be undone.`
+    if (
+      !window.confirm(
+        confirmation,
+      )
+    ) {
+      return
+    }
+
+    setFolderActionError(null)
+    try {
+      const deletedNotes = await deleteNotebookLocally(
+        folderId,
+        folder.user_id,
+        folderNotes,
+      )
+      const deletedNoteIds = new Set(deletedNotes.map((note) => note.id))
+      const nextNotes = notesRef.current.map((note) =>
+        deletedNoteIds.has(note.id)
+          ? deletedNotes.find((deletedNote) => deletedNote.id === note.id) ?? note
+          : note,
+      )
+      notesRef.current = nextNotes
+      setNotes(nextNotes)
+      setFolders((previousFolders) => previousFolders.filter((item) => item.id !== folderId))
+      setExpandedFolderIds((previous) => {
+        const next = new Set(previous)
+        next.delete(folderId)
+        return next
+      })
+      if (selectedFolderId === folderId) {
+        setSelectedFolderId(null)
+      }
+      if (selectedId && deletedNoteIds.has(selectedId)) {
+        setSelectedId(null)
+      }
+      if (pendingDraftRef.current && deletedNoteIds.has(pendingDraftRef.current.id)) {
+        pendingDraftRef.current = null
+        if (saveTimeoutRef.current !== null) {
+          window.clearTimeout(saveTimeoutRef.current)
+          saveTimeoutRef.current = null
+        }
+      }
+      setNavigationOpen(false)
+
+      if (navigator.onLine && isSupabaseConfigured) {
+        void syncUserNotes(folder.user_id)
+      }
+    } catch (error) {
+      console.error('Unable to delete the folder locally', error)
+      setFolderActionError(
+        error instanceof Error ? error.message : 'Unable to delete the folder. Please try again.',
+      )
     }
   }
 
@@ -757,18 +1257,22 @@ function App() {
     setNoteMenu(null)
   }
 
-  const activateNoteMenuAction = (action: 'rename' | 'delete', noteId: string) => {
+  const activateNoteMenuAction = (action: NoteMenuAction, noteId: string) => {
     if (action === 'rename') {
       beginRename(noteId)
-    } else {
+    } else if (action === 'delete') {
       void handleDelete(noteId)
       setNoteMenu(null)
+    } else if (action === 'pin') {
+      void handleToggleNotePin(noteId)
+    } else {
+      void handleToggleNoteLock(noteId)
     }
   }
 
   const handleNoteMenuActionTouchEnd = (
     event: React.TouchEvent<HTMLButtonElement>,
-    action: 'rename' | 'delete',
+    action: NoteMenuAction,
     noteId: string,
   ) => {
     event.stopPropagation()
@@ -783,7 +1287,7 @@ function App() {
     activateNoteMenuAction(action, noteId)
   }
 
-  const handleNoteMenuActionClick = (action: 'rename' | 'delete', noteId: string) => {
+  const handleNoteMenuActionClick = (action: NoteMenuAction, noteId: string) => {
     if (suppressMenuClickRef.current) {
       suppressMenuClickRef.current = false
       if (suppressMenuClickTimerRef.current !== null) {
@@ -993,6 +1497,78 @@ function App() {
     )
   }
 
+  const renderNoteCard = (note: Note) => {
+    const isLocked = note.metadata_json.note_locked === true
+    const isUnlocked = unlockedNoteIds.has(note.id)
+
+    return (
+      <button
+        key={note.id}
+        type="button"
+        className={[
+          'note-item',
+          selectedId === note.id ? 'selected' : '',
+          noteMenu?.noteId === note.id ? 'context-open' : '',
+          animatingNoteIds.has(note.id) ? 'is-moving' : '',
+        ].filter(Boolean).join(' ')}
+        onPointerDown={(event) => handleNotePointerDown(event, note.id)}
+        onPointerMove={handleNotePointerMove}
+        onPointerUp={cancelNoteLongPress}
+        onPointerCancel={cancelNoteLongPress}
+        onClickCapture={(event) => {
+          if (suppressOutsideNoteClickRef.current) {
+            suppressOutsideNoteClickRef.current = false
+            if (suppressOutsideNoteClickTimerRef.current !== null) {
+              window.clearTimeout(suppressOutsideNoteClickTimerRef.current)
+              suppressOutsideNoteClickTimerRef.current = null
+            }
+            event.preventDefault()
+            event.stopPropagation()
+          }
+        }}
+        onContextMenu={(event) => {
+          event.preventDefault()
+          openNoteMenu(note.id, event.clientX, event.clientY)
+        }}
+        onClick={(event) => {
+          if (suppressNoteClickRef.current) {
+            suppressNoteClickRef.current = false
+            event.preventDefault()
+            return
+          }
+          void handleOpenNote(note)
+        }}
+      >
+        <span className="note-item-title">
+          {note.title || 'Untitled note'}
+          {isLocked ? (
+            <span className="note-lock-indicator" aria-label={isUnlocked ? 'Unlocked' : 'Locked'}>
+              {isUnlocked ? '🔓' : '🔒'}
+            </span>
+          ) : null}
+        </span>
+        {noteViewMode === 'grid' ? (
+          <span className="note-item-preview">
+            {isLocked && !isUnlocked
+              ? '🔒'
+              : note.content.trim() || 'No additional text'}
+          </span>
+        ) : null}
+        <span className="note-item-details">
+          <span className="note-item-meta">
+            {new Date(note.updated_at).toLocaleDateString()}
+          </span>
+          <span className="note-item-state">{note.sync_status}</span>
+        </span>
+      </button>
+    )
+  }
+  const noteMenuTarget = noteMenu
+    ? activeNotes.find((note) => note.id === noteMenu.noteId)
+    : undefined
+  const noteMenuTargetIsLocked = noteMenuTarget?.metadata_json.note_locked === true
+  const noteMenuTargetIsUnlocked = noteMenu ? unlockedNoteIds.has(noteMenu.noteId) : false
+
   return (
     <>
     <div className={`app-shell ${themeClassName} ${selectedNote ? 'mobile-note-open' : ''}`}>
@@ -1015,6 +1591,22 @@ function App() {
             >
               <option value="list">☰ List</option>
               <option value="grid">▦ Tiles</option>
+            </select>
+          </label>
+          <label className="sort-select-wrap">
+            <span className="visually-hidden">Sort notes</span>
+            <select
+              className="sort-select"
+              aria-label="Sort notes"
+              value={noteSortMode}
+              onChange={(event) =>
+                void handleNoteSortModeChange(event.target.value as NoteSortMode)
+              }
+            >
+              <option value="modified">Modified</option>
+              <option value="created">Created</option>
+              <option value="name-asc">Name A–Z</option>
+              <option value="name-desc">Name Z–A</option>
             </select>
           </label>
           <button
@@ -1168,6 +1760,15 @@ function App() {
                   >
                     +
                   </button>
+                  <button
+                    type="button"
+                    className="navigation-folder-action navigation-folder-delete"
+                    aria-label={`Delete folder ${folder.name}`}
+                    title={`Delete folder ${folder.name}`}
+                    onClick={() => void handleDeleteFolder(folder.id)}
+                  >
+                    <TrashIcon />
+                  </button>
                 </div>
                 {isExpanded ? (
                   <div className="navigation-folder-notes">
@@ -1180,11 +1781,13 @@ function App() {
                         className={`navigation-note ${selectedId === note.id ? 'is-selected' : ''}`}
                         onClick={() => {
                           setSelectedFolderId(folder.id)
-                          setSelectedId(note.id)
                           setNavigationOpen(false)
+                          void handleOpenNote(note)
                         }}
                       >
-                        <span aria-hidden="true">▤</span>
+                        <span aria-hidden="true">
+                          {note.metadata_json.note_locked === true ? '🔒' : '▤'}
+                        </span>
                         <span>{note.title || 'Untitled note'}</span>
                       </button>
                     ))}
@@ -1240,6 +1843,16 @@ function App() {
               <button
                 type="button"
                 className="secondary-button settings-sign-out"
+                onClick={() => openNoteLockDialog(noteLockConfigured ? 'change' : 'create')}
+              >
+                {noteLockConfigured ? 'Change note lock password' : 'Set note lock password'}
+              </button>
+              <p className="settings-security-note">
+                Note locking hides content in this app only; it does not encrypt stored notes.
+              </p>
+              <button
+                type="button"
+                className="secondary-button settings-sign-out"
                 onClick={() => {
                   setSettingsOpen(false)
                   setNavigationOpen(false)
@@ -1279,59 +1892,18 @@ function App() {
                 </button>
               </div>
             ) : (
-              visibleNotes.map((note) => (
-                <button
-                  key={note.id}
-                  type="button"
-                  className={[
-                    'note-item',
-                    selectedId === note.id ? 'selected' : '',
-                    noteMenu?.noteId === note.id ? 'context-open' : '',
-                  ].filter(Boolean).join(' ')}
-                  onPointerDown={(event) => handleNotePointerDown(event, note.id)}
-                  onPointerMove={handleNotePointerMove}
-                  onPointerUp={cancelNoteLongPress}
-                  onPointerCancel={cancelNoteLongPress}
-                  onClickCapture={(event) => {
-                    if (suppressOutsideNoteClickRef.current) {
-                      suppressOutsideNoteClickRef.current = false
-                      if (suppressOutsideNoteClickTimerRef.current !== null) {
-                        window.clearTimeout(suppressOutsideNoteClickTimerRef.current)
-                        suppressOutsideNoteClickTimerRef.current = null
-                      }
-                      event.preventDefault()
-                      event.stopPropagation()
-                    }
-                  }}
-                  onContextMenu={(event) => {
-                    event.preventDefault()
-                    openNoteMenu(note.id, event.clientX, event.clientY)
-                  }}
-                  onClick={(event) => {
-                    if (suppressNoteClickRef.current) {
-                      suppressNoteClickRef.current = false
-                      event.preventDefault()
-                      return
-                    }
-                    setSelectedId(note.id)
-                  }}
-                >
-                  <span className="note-item-title">
-                    {note.title || 'Untitled note'}
-                  </span>
-                  {noteViewMode === 'grid' ? (
-                    <span className="note-item-preview">
-                      {note.content.trim() || 'No additional text'}
-                    </span>
-                  ) : null}
-                  <span className="note-item-details">
-                    <span className="note-item-meta">
-                      {new Date(note.updated_at).toLocaleDateString()}
-                    </span>
-                    <span className="note-item-state">{note.sync_status}</span>
-                  </span>
-                </button>
-              ))
+              <>
+                {pinnedNotes.length > 0 ? (
+                  <>
+                    <h2 className="note-section-heading">Pinned Notes</h2>
+                    {pinnedNotes.map(renderNoteCard)}
+                  </>
+                ) : null}
+                {regularNotes.length > 0 && pinnedNotes.length > 0 ? (
+                  <h2 className="note-section-heading">Notes</h2>
+                ) : null}
+                {regularNotes.map(renderNoteCard)}
+              </>
             )}
           </div>
         </aside>
@@ -1348,6 +1920,8 @@ function App() {
                   Back to notes
                 </button>
                 <input
+                  ref={noteTitleInputRef}
+                  autoFocus
                   aria-label="Note title"
                   value={draftTitle}
                   onChange={(event) => handleTitleChange(event.target.value)}
@@ -1414,6 +1988,26 @@ function App() {
             <button
               type="button"
               role="menuitem"
+              onTouchEnd={(event) =>
+                handleNoteMenuActionTouchEnd(event, 'pin', noteMenu.noteId)
+              }
+              onClick={() => handleNoteMenuActionClick('pin', noteMenu.noteId)}
+            >
+              {noteMenuTarget?.is_pinned ? 'Unpin' : 'Pin'}
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              onTouchEnd={(event) =>
+                handleNoteMenuActionTouchEnd(event, 'lock', noteMenu.noteId)
+              }
+              onClick={() => handleNoteMenuActionClick('lock', noteMenu.noteId)}
+            >
+              {noteMenuTargetIsLocked && !noteMenuTargetIsUnlocked ? 'Unlock' : 'Lock'}
+            </button>
+            <button
+              type="button"
+              role="menuitem"
               className="note-context-delete"
               aria-label="Delete note"
               title="Delete note"
@@ -1460,6 +2054,146 @@ function App() {
                   Cancel
                 </button>
                 <button type="submit" className="primary-button">Save</button>
+              </div>
+            </form>
+          </div>
+        ) : null}
+        {noteLockAction ? (
+          <div
+            className="rename-dialog-backdrop"
+            onClick={() => setNoteLockAction(null)}
+          >
+            <form
+              className={`rename-dialog ${themeClassName}`}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="note-lock-action-title"
+              onSubmit={(event) => void handleNoteLockActionSubmit(event)}
+              onClick={(event) => event.stopPropagation()}
+            >
+              <h2 id="note-lock-action-title">
+                {noteLockAction.mode === 'lock' ? 'Lock note' : 'Unlock note'}
+              </h2>
+              <label htmlFor="note-lock-action-password">Note lock password</label>
+              <input
+                id="note-lock-action-password"
+                type="password"
+                autoFocus
+                autoComplete="current-password"
+                value={noteLockActionPassword}
+                onChange={(event) => setNoteLockActionPassword(event.target.value)}
+              />
+              {noteLockActionError ? (
+                <p className="app-error" role="alert">{noteLockActionError}</p>
+              ) : null}
+              <div className="rename-dialog-actions">
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={() => setNoteLockAction(null)}
+                >
+                  Cancel
+                </button>
+                <button type="submit" className="primary-button">
+                  {noteLockAction.mode === 'lock' ? 'Lock note' : 'Unlock note'}
+                </button>
+              </div>
+            </form>
+          </div>
+        ) : null}
+        {noteLockDialogMode ? (
+          <div
+            className="rename-dialog-backdrop"
+            onClick={() => setNoteLockDialogMode(null)}
+          >
+            <form
+              className={`rename-dialog ${themeClassName}`}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="note-lock-dialog-title"
+              onSubmit={(event) => void handleNoteLockSettingsSubmit(event)}
+              onClick={(event) => event.stopPropagation()}
+            >
+              <h2 id="note-lock-dialog-title">
+                {noteLockDialogMode === 'create'
+                  ? 'Set note lock password'
+                  : noteLockDialogMode === 'change'
+                    ? 'Change note lock password'
+                    : 'Recover note lock password'}
+              </h2>
+              {noteLockDialogMode === 'change' ||
+              (noteLockDialogMode === 'recover' && !noteLockRecoveryVerified) ? (
+                <label htmlFor="note-lock-old-password">
+                  {noteLockDialogMode === 'recover' ? 'Login password' : 'Old note lock password'}
+                </label>
+              ) : null}
+              {noteLockDialogMode === 'change' ||
+              (noteLockDialogMode === 'recover' && !noteLockRecoveryVerified) ? (
+                <input
+                  id="note-lock-old-password"
+                  type="password"
+                  autoFocus
+                  autoComplete="current-password"
+                  value={noteLockOldPassword}
+                  onChange={(event) => setNoteLockOldPassword(event.target.value)}
+                />
+              ) : null}
+              {noteLockDialogMode !== 'recover' || noteLockRecoveryVerified ? (
+                <>
+                  <label htmlFor="note-lock-new-password">New note lock password</label>
+                  <input
+                    id="note-lock-new-password"
+                    type="password"
+                    autoFocus={noteLockDialogMode === 'create' || noteLockRecoveryVerified}
+                    autoComplete="new-password"
+                    minLength={8}
+                    value={noteLockNewPassword}
+                    onChange={(event) => setNoteLockNewPassword(event.target.value)}
+                  />
+                  <label htmlFor="note-lock-confirm-password">Confirm new password</label>
+                  <input
+                    id="note-lock-confirm-password"
+                    type="password"
+                    autoComplete="new-password"
+                    minLength={8}
+                    value={noteLockConfirmPassword}
+                    onChange={(event) => setNoteLockConfirmPassword(event.target.value)}
+                  />
+                </>
+              ) : null}
+              {noteLockDialogError ? (
+                <p className="app-error" role="alert">{noteLockDialogError}</p>
+              ) : null}
+              <div className="rename-dialog-actions">
+                {noteLockDialogMode === 'change' ? (
+                  <button
+                    type="button"
+                    className="secondary-button note-lock-forgot"
+                    onClick={() => {
+                      setNoteLockOldPassword('')
+                      setNoteLockRecoveryVerified(false)
+                      setNoteLockDialogMode('recover')
+                      setNoteLockDialogError(null)
+                    }}
+                  >
+                    Forgot password?
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  className="secondary-button"
+                  disabled={noteLockSaving}
+                  onClick={() => setNoteLockDialogMode(null)}
+                >
+                  Cancel
+                </button>
+                <button type="submit" className="primary-button" disabled={noteLockSaving}>
+                  {noteLockSaving
+                    ? 'Please wait...'
+                    : noteLockDialogMode === 'recover' && !noteLockRecoveryVerified
+                      ? 'Verify login password'
+                      : 'Save password'}
+                </button>
               </div>
             </form>
           </div>

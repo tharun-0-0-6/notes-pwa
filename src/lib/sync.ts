@@ -25,6 +25,54 @@ export async function saveNoteLocally(
   })
 }
 
+export async function deleteNotebookLocally(
+  notebookId: string,
+  userId: string,
+  notes: Note[],
+) {
+  const deletedAt = new Date().toISOString()
+  const deletedNotes = notes.map((note) => ({
+    ...note,
+    deleted_at: deletedAt,
+    updated_at: deletedAt,
+    version: note.version + 1,
+    sync_status: 'pending' as const,
+  }))
+
+  await db.transaction(
+    'rw',
+    db.notes,
+    db.syncQueue,
+    db.notebooks,
+    db.settings,
+    async () => {
+      for (const note of deletedNotes) {
+        const queueItem: SyncQueueItem = {
+          queue_id: crypto.randomUUID(),
+          user_id: userId,
+          note_id: note.id,
+          action: 'delete',
+          payload: { ...note },
+          created_at: deletedAt,
+          processed_at: null,
+          retry_count: 0,
+        }
+        await db.notes.put(note)
+        await db.syncQueue.put(queueItem)
+      }
+
+      await db.notebooks.delete(notebookId)
+      await db.settings.put({
+        key: `deleted-notebook:${notebookId}`,
+        value: userId,
+        updated_at: deletedAt,
+      })
+    },
+  )
+
+  return deletedNotes
+}
+
 async function uploadPendingNotes(userId: string) {
   if (!supabase) {
     return
@@ -189,7 +237,21 @@ async function pullRemoteNotebooks(userId: string) {
     throw error
   }
 
+  const deletedNotebookSettings = (await db.settings.toArray()).filter(
+    (setting) =>
+      setting.key.startsWith('deleted-notebook:') &&
+      setting.value === userId,
+  )
+  const deletedNotebookIds = new Set(
+    deletedNotebookSettings.map((setting) => setting.key.slice('deleted-notebook:'.length)),
+  )
+  const remoteNotebookIds = new Set((data ?? []).map((notebook) => notebook.id))
+
   for (const remoteNotebook of data ?? []) {
+    if (deletedNotebookIds.has(remoteNotebook.id)) {
+      continue
+    }
+
     const localNotebook = await db.notebooks.get(remoteNotebook.id)
     if (
       (localNotebook && localNotebook.user_id !== userId) ||
@@ -203,6 +265,51 @@ async function pullRemoteNotebooks(userId: string) {
       ...remoteNotebook,
       sync_status: 'synced',
     })
+  }
+
+  const localNotebooks = await db.notebooks
+    .where('user_id')
+    .equals(userId)
+    .filter((notebook) => notebook.sync_status === 'synced')
+    .toArray()
+  await Promise.all(
+    localNotebooks
+      .filter(
+        (notebook) =>
+          !remoteNotebookIds.has(notebook.id) || deletedNotebookIds.has(notebook.id),
+      )
+      .map((notebook) => db.notebooks.delete(notebook.id)),
+  )
+}
+
+async function uploadDeletedNotebooks(userId: string) {
+  if (!supabase) {
+    return
+  }
+
+  const pendingDeletes = (await db.settings.toArray()).filter(
+    (setting) =>
+      setting.key.startsWith('deleted-notebook:') &&
+      setting.value === userId,
+  )
+
+  for (const deletion of pendingDeletes) {
+    const notebookId = deletion.key.slice('deleted-notebook:'.length)
+    try {
+      const { error } = await supabase
+        .from('notebooks')
+        .delete()
+        .eq('id', notebookId)
+        .eq('user_id', userId)
+
+      if (error) {
+        throw error
+      }
+
+      await db.settings.delete(deletion.key)
+    } catch (error) {
+      console.error('Failed to sync notebook deletion', { notebookId, error })
+    }
   }
 }
 
@@ -268,6 +375,8 @@ async function runUserSync(userId: string) {
     return
   }
 
+  await pullRemoteNotebooks(userId)
+  await uploadDeletedNotebooks(userId)
   await pullRemoteNotebooks(userId)
   await uploadPendingNotebooks(userId)
   await pullRemoteNotebooks(userId)

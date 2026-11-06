@@ -31,13 +31,31 @@ class NotesDatabase extends Dexie {
 export const db = new NotesDatabase()
 
 export async function seedDefaultSettings() {
-  const saved = await db.settings.get('ui-theme')
+  await db.transaction('rw', db.settings, async () => {
+    const savedTheme = await db.settings.get('ui-theme')
+    const defaultMigration = await db.settings.get('ui-theme-night-default-migrated')
+    const now = new Date().toISOString()
 
-  if (!saved) {
-    await db.settings.put({
-      key: 'ui-theme',
-      value: 'light',
-      updated_at: new Date().toISOString(),
-    })
-  }
+    if (!defaultMigration) {
+      if (!savedTheme || savedTheme.value === 'light') {
+        await db.settings.put({
+          key: 'ui-theme',
+          value: 'dark',
+          updated_at: now,
+        })
+      }
+
+      await db.settings.put({
+        key: 'ui-theme-night-default-migrated',
+        value: true,
+        updated_at: now,
+      })
+    } else if (!savedTheme) {
+      await db.settings.put({
+        key: 'ui-theme',
+        value: 'dark',
+        updated_at: now,
+      })
+    }
+  })
 }
