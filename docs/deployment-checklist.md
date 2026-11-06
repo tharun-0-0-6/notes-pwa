@@ -51,7 +51,7 @@ order by tablename, policyname;
 
 Deploy a Preview first. Verify it points at the intended Supabase project before promoting it to Production. Environment variable changes require a new deployment.
 
-The current workspace is not a Git repository. Before a Vercel Git-based deployment, connect or push the project to the intended Git provider; alternatively, use an already-authorized deployment workflow.
+This workspace has a Git repository and an `origin` remote. Before a Vercel Git-based deployment, confirm the remote points to the intended provider and authenticate an authorized GitHub/Vercel workflow. Alternatively, use an already-authorized deployment workflow.
 
 ## Post-deployment verification
 
@@ -61,8 +61,11 @@ The current workspace is not a Git repository. Before a Vercel Git-based deploym
 - [ ] Create or edit a note offline, reconnect, and confirm the note syncs.
 - [ ] Test account isolation with two authorized test accounts: each account must see only its own notes. Do not use production users' private data for this test.
 - [ ] Install the PWA on a mobile browser and verify launch and offline app-shell behavior.
+- [ ] On Android, open the HTTPS app in Chrome and use the browser menu's **Install app** / **Add to Home screen** action. Launch the installed app, sign in with a test account, create a test note, enable airplane mode, verify the app shell and note remain available, then reconnect and confirm sync.
+- [ ] On iPhone, open the HTTPS app in Safari, use **Share → Add to Home Screen**, launch it from the Home Screen, and repeat the signed-in offline/reconnect note check. Verify the app remains usable after closing and reopening it.
+- [ ] Record device model, OS/browser versions, install outcome, offline/reconnect outcome, and any console or sync errors. Browser viewport emulation does not replace these physical-device checks.
 - [ ] Check the Vercel deployment logs and Supabase Auth/database logs for failures.
 
 ## Verification boundary
 
-The local build and an authenticated note sync were checked during development. Production Vercel settings, deployed Supabase RLS state, cross-account isolation, and real-device PWA behavior still require verification in their respective services; this checklist does not claim those checks have passed.
+The local production build, offline note persistence, and offline PWA app-shell reload have been checked. A dedicated Supabase test account was used to verify sign-in persistence across reloads, online note upload and remote pull after clearing local IndexedDB, and offline edit/reconnect sync. Temporary test notes for that account were soft-deleted and a fresh pull showed no active notes. An existing Vercel production deployment (`https://notes-pwa-bice.vercel.app/`) is Ready from the `main` branch; the deployed HTTPS app and service-worker offline reload were checked. The login layout had no horizontal overflow at 360px, 390px, 768px, and 1366px viewport widths, and the deployed PWA manifest, worker, and icon endpoints responded successfully. These are browser viewport checks, not tests on physical devices. This environment has no connected Android device/ADB bridge or local install-capable browser, so Android/iPhone installation and real-device offline behavior remain pending. Live Supabase RLS state, cross-account isolation, and a Preview deployment for a new code revision also remain unverified.

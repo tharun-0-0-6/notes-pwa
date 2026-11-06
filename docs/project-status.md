@@ -28,7 +28,18 @@ This project is now in the implementation baseline phase. The app foundation has
 - manual browser check confirmed the app loads and the notes editor remains stable while typing
 - persistent dark/light theme toggle added and verified in the browser
 - production deployment checklist added, covering Vercel configuration, Supabase environment variables, RLS inspection, account-isolation testing, and post-deployment checks
-- workspace is not currently a Git repository, so a Git-based Vercel deployment requires connecting/pushing it to the intended provider first
+- offline note creation and editing verified in a browser with networking disabled; the note remained in IndexedDB after reload
+- production PWA service worker verified to serve the app shell after an offline reload
+- dedicated Supabase test account used to verify sign-in persistence across reloads
+- authenticated cloud round trip verified: a test note was uploaded, restored after clearing local IndexedDB, edited offline, synced after reconnect, and restored from cloud again
+- temporary test notes were soft-deleted, a fresh cloud pull showed no active test notes, and the test account was signed out
+- existing Vercel production deployment confirmed Ready at `https://notes-pwa-bice.vercel.app/`, sourced from the `main` branch
+- deployed HTTPS app shell verified at desktop and mobile viewport sizes; the production service worker served the app after an offline reload
+- production login layout checked at 360px, 390px, 768px, and 1366px viewport widths with no horizontal overflow; deployed PWA manifest and service worker endpoints returned successfully
+- production app, manifest, service-worker, and icon endpoints returned successfully; physical iOS/Android installation is still pending because this environment has no connected mobile device or ADB bridge
+- mobile app navigation now starts on the notes home and opens a full-screen editor only after selecting a note; a back control returns home
+- persistent List/Tiles layout preference added for desktop and mobile, with responsive note previews in tile mode
+- Git repository and origin remote are configured; GitHub CLI is not authenticated in the current environment, and Vercel CLI is unavailable
 
 ### Confirmed direction
 - Build as a PWA website, not a native app
@@ -88,14 +99,18 @@ This project is now in the implementation baseline phase. The app foundation has
 - dev server launched successfully and app checked in browser
 - persistent dark/light theme toggle implemented and browser-checked
 - production deployment checklist documented in `docs/deployment-checklist.md`
+- offline local note persistence and PWA offline app-shell reload verified in a browser
+- authenticated Supabase session persistence, remote note pull/upload, and offline reconnect sync verified with a dedicated test account
+- existing Vercel production deployment and offline app-shell behavior verified; mobile viewport smoke check passed
+- deployed login page and PWA metadata checked at common phone, tablet, and desktop viewport sizes
+- physical iOS/Android PWA installation and offline/reconnect checks remain for device owners; exact manual steps are in `docs/deployment-checklist.md`
+- responsive home/detail navigation and saved list/tile preference verified in mobile and desktop browser viewports
 
 ### Not started yet
-- end-to-end offline/reconnect sync verification with an authenticated account
-- login persistence verification after closing and reopening the app
 - confirmation that production Row Level Security policies are enabled and correct in the live Supabase project
-- production Vercel environment configuration and deployment
 - cross-account isolation verification against two authorized test accounts
-- mobile and desktop testing on real devices
+- hands-on installation and offline/reconnect testing on physical iOS and Android devices
+- Preview deployment verification for a new code revision
 - final feature roadmap implementation
 - note sharing and collaboration features
 

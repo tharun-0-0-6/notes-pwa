@@ -9,6 +9,7 @@ import type { Note } from './types'
 const DEMO_USER_ID = 'demo-user'
 const DEMO_USER_NAME = 'Demo user'
 type ThemeMode = 'light' | 'dark'
+type NoteViewMode = 'list' | 'grid'
 
 const createEmptyNote = (userId: string): Note => {
   const now = new Date().toISOString()
@@ -35,6 +36,7 @@ const createEmptyNote = (userId: string): Note => {
 function App() {
   const [currentUser, setCurrentUser] = useState<AppUser | null>(null)
   const [theme, setTheme] = useState<ThemeMode>('light')
+  const [noteViewMode, setNoteViewMode] = useState<NoteViewMode>('list')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [authError, setAuthError] = useState<string | null>(null)
@@ -61,9 +63,12 @@ function App() {
 
       const storedTheme = await db.settings.get('ui-theme')
       const nextTheme = storedTheme?.value === 'dark' ? 'dark' : 'light'
+      const storedViewMode = await db.settings.get('note-view-mode')
+      const nextViewMode = storedViewMode?.value === 'grid' ? 'grid' : 'list'
 
       if (active) {
         setTheme(nextTheme)
+        setNoteViewMode(nextViewMode)
       }
     }
 
@@ -168,12 +173,8 @@ function App() {
 
       setNotes(userNotes)
 
-      if (userNotes.length > 0 && !selectedId) {
-        setSelectedId(userNotes[0].id)
-      }
-
       if (selectedId && !userNotes.some((note) => note.id === selectedId)) {
-        setSelectedId(userNotes[0]?.id ?? null)
+        setSelectedId(null)
       }
     }
 
@@ -254,6 +255,15 @@ function App() {
     await db.settings.put({
       key: 'ui-theme',
       value: nextTheme,
+      updated_at: new Date().toISOString(),
+    })
+  }
+
+  const handleNoteViewModeChange = async (nextMode: NoteViewMode) => {
+    setNoteViewMode(nextMode)
+    await db.settings.put({
+      key: 'note-view-mode',
+      value: nextMode,
       updated_at: new Date().toISOString(),
     })
   }
@@ -423,7 +433,7 @@ function App() {
     setNotes(nextNotes)
 
     if (selectedId === noteId) {
-      setSelectedId(nextNotes[0]?.id ?? null)
+      setSelectedId(null)
     }
   }
 
@@ -585,7 +595,7 @@ function App() {
   }
 
   return (
-    <div className={`app-shell ${themeClassName}`}>
+    <div className={`app-shell ${themeClassName} ${selectedNote ? 'mobile-note-open' : ''}`}>
       <header className="topbar">
         <div>
           <p className="eyebrow">Offline-first notes</p>
@@ -596,6 +606,24 @@ function App() {
           <button type="button" className="secondary-button" onClick={() => void handleThemeToggle()}>
             {theme === 'dark' ? 'Light mode' : 'Dark mode'}
           </button>
+          <div className="view-toggle" role="group" aria-label="Note layout">
+            <button
+              type="button"
+              className={`secondary-button ${noteViewMode === 'list' ? 'active' : ''}`}
+              aria-pressed={noteViewMode === 'list'}
+              onClick={() => void handleNoteViewModeChange('list')}
+            >
+              List
+            </button>
+            <button
+              type="button"
+              className={`secondary-button ${noteViewMode === 'grid' ? 'active' : ''}`}
+              aria-pressed={noteViewMode === 'grid'}
+              onClick={() => void handleNoteViewModeChange('grid')}
+            >
+              Tiles
+            </button>
+          </div>
           <span className={`status-pill ${online ? 'online' : 'offline'}`}>
             {online ? 'Online' : 'Offline'}
           </span>
@@ -608,14 +636,20 @@ function App() {
         </div>
       </header>
 
-      <div className="workspace">
+      <div
+        className={[
+          'workspace',
+          `view-${noteViewMode}`,
+          selectedNote ? 'note-open' : '',
+        ].filter(Boolean).join(' ')}
+      >
         <aside className="sidebar">
           <div className="sidebar-header">
             <strong>{currentUser?.name ?? DEMO_USER_NAME}</strong>
             <span>{syncLabel}</span>
           </div>
 
-          <div className="note-list">
+          <div className={`note-list ${noteViewMode === 'grid' ? 'grid-view' : 'list-view'}`}>
             {activeNotes.length === 0 ? (
               <div className="empty-state">
                 <p>No notes yet</p>
@@ -634,10 +668,17 @@ function App() {
                   <span className="note-item-title">
                     {note.title || 'Untitled note'}
                   </span>
-                  <span className="note-item-meta">
-                    {new Date(note.updated_at).toLocaleDateString()}
+                  {noteViewMode === 'grid' ? (
+                    <span className="note-item-preview">
+                      {note.content.trim() || 'No additional text'}
+                    </span>
+                  ) : null}
+                  <span className="note-item-details">
+                    <span className="note-item-meta">
+                      {new Date(note.updated_at).toLocaleDateString()}
+                    </span>
+                    <span className="note-item-state">{note.sync_status}</span>
                   </span>
-                  <span className="note-item-state">{note.sync_status}</span>
                 </button>
               ))
             )}
@@ -648,6 +689,13 @@ function App() {
           {selectedNote ? (
             <>
               <div className="editor-header">
+                <button
+                  type="button"
+                  className="secondary-button editor-back"
+                  onClick={() => setSelectedId(null)}
+                >
+                  Back to notes
+                </button>
                 <input
                   aria-label="Note title"
                   value={draftTitle}
