@@ -18,6 +18,15 @@ export type Note = {
   sync_status: SyncStatus
 }
 
+export type Notebook = {
+  id: string
+  user_id: string
+  name: string
+  parent_id: string | null
+  created_at: string
+  sync_status: SyncStatus
+}
+
 export type SyncQueueItem = {
   queue_id: string
   user_id: string

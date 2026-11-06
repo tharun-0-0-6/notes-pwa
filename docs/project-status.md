@@ -42,6 +42,14 @@ This project is now in the implementation baseline phase. The app foundation has
 - tile cards have a consistent minimum height and keep date/sync status pinned to the bottom even when note content is empty
 - refreshed dark mode with black surfaces and orange accents across app controls, menus, editor, and PWA browser chrome; light mode now uses white surfaces, with mobile scrollbars hidden while preserving scrolling
 - dark neutral surfaces now use neutral borders (orange fill remains on primary action buttons); delete actions are red trash-can controls, and the Settings panel closes when leaving its menu area or interacting elsewhere
+- added a hamburger navigation drawer with General Notes and folder-specific note hierarchies; Settings stays pinned below the independently scrollable, gradient-faded folder list
+- folders are saved locally for offline use and synced through the existing Supabase notebooks table; folder-created notes retain their notebook assignment
+- browser checks verified folder creation, creating notes inside a folder, selecting a nested note, Settings placement/auto-close, and full-height mobile drawer sizing
+- the drawer gradient now appears only when the folder list overflows; mobile Settings spans the drawer width, and outside taps pass through to the underlying control while closing the drawer
+- taps on note cards outside an open drawer now dismiss the drawer without also opening the note; the following tap opens it normally
+- verified on a mobile viewport: tapping the exposed part of a note card closes the drawer without opening the editor, and the next tap opens the note
+- Settings remains open while moving between its button and options; Appearance toggles the theme without dismissing the menu, while outside clicks still close it
+- delete actions use a red trash-can icon inside a compact outlined button; the List/Tiles chevron is vertically centered, and the login/loading screen defaults to dark without changing saved app appearance
 - compact Settings menu added with sign-out and emoji theme control; connection state uses accessible green online/orange offline indicators in the menu on desktop and mobile
 - mobile toolbar now uses an emoji-only Settings control and a List/Tiles dropdown; New Note is a floating action button, and the document background follows the active theme
 - new notes open immediately after local persistence while cloud sync continues in the background; mobile title, layout selector, and Settings control share one header row

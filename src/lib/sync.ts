@@ -174,6 +174,81 @@ async function pullRemoteNotes(userId: string) {
   }
 }
 
+async function pullRemoteNotebooks(userId: string) {
+  if (!supabase) {
+    return
+  }
+
+  const { data, error } = await supabase
+    .from('notebooks')
+    .select('*')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: true })
+
+  if (error) {
+    throw error
+  }
+
+  for (const remoteNotebook of data ?? []) {
+    const localNotebook = await db.notebooks.get(remoteNotebook.id)
+    if (
+      (localNotebook && localNotebook.user_id !== userId) ||
+      localNotebook?.sync_status === 'pending' ||
+      localNotebook?.sync_status === 'error'
+    ) {
+      continue
+    }
+
+    await db.notebooks.put({
+      ...remoteNotebook,
+      sync_status: 'synced',
+    })
+  }
+}
+
+async function uploadPendingNotebooks(userId: string) {
+  if (!supabase) {
+    return
+  }
+
+  const pendingNotebooks = await db.notebooks
+    .where('user_id')
+    .equals(userId)
+    .filter((notebook) => notebook.sync_status !== 'synced')
+    .toArray()
+
+  for (const notebook of pendingNotebooks) {
+    try {
+      const { error } = await supabase.from('notebooks').upsert(
+        {
+          id: notebook.id,
+          user_id: notebook.user_id,
+          name: notebook.name,
+          parent_id: notebook.parent_id,
+          created_at: notebook.created_at,
+        },
+        { onConflict: 'id' },
+      )
+
+      if (error) {
+        throw error
+      }
+
+      const latestNotebook = await db.notebooks.get(notebook.id)
+      if (
+        latestNotebook &&
+        latestNotebook.name === notebook.name &&
+        latestNotebook.parent_id === notebook.parent_id
+      ) {
+        await db.notebooks.update(notebook.id, { sync_status: 'synced' })
+      }
+    } catch (error) {
+      await db.notebooks.update(notebook.id, { sync_status: 'error' })
+      console.error('Failed to sync notebook', { notebookId: notebook.id, error })
+    }
+  }
+}
+
 async function runUserSync(userId: string) {
   if (!isSupabaseConfigured || !supabase) {
     return
@@ -193,6 +268,9 @@ async function runUserSync(userId: string) {
     return
   }
 
+  await pullRemoteNotebooks(userId)
+  await uploadPendingNotebooks(userId)
+  await pullRemoteNotebooks(userId)
   await pullRemoteNotes(userId)
   await uploadPendingNotes(userId)
   await pullRemoteNotes(userId)

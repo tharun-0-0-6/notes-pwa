@@ -346,10 +346,10 @@ This is not reliable for a production-style notes app.
 - installable PWA
 
 ### v2
-- folders / notebooks
+- folders / notebooks (implemented with offline storage and Supabase sync)
 - pin notes
 - archive notes
-- dark mode
+- dark mode (implemented)
 - tags
 - note sorting
 

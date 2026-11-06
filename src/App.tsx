@@ -5,7 +5,7 @@ import './App.css'
 import { db, seedDefaultSettings } from './lib/db'
 import { isSupabaseConfigured, normaliseSupabaseUser, supabase, type AppUser } from './lib/supabase'
 import { saveNoteLocally, syncUserNotes } from './lib/sync'
-import type { Note } from './types'
+import type { Notebook, Note } from './types'
 
 const DEMO_USER_ID = 'demo-user'
 const DEMO_USER_NAME = 'Demo user'
@@ -39,11 +39,47 @@ const createEmptyNote = (userId: string): Note => {
   }
 }
 
+const createEmptyNotebook = (userId: string, name: string): Notebook => ({
+  id: crypto.randomUUID(),
+  user_id: userId,
+  name,
+  parent_id: null,
+  created_at: new Date().toISOString(),
+  sync_status: 'pending',
+})
+
+function TrashIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      className="trash-icon"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M4 7h16" />
+      <path d="M10 11v6M14 11v6" />
+      <path d="m6 7 1 13h10l1-13M9 7V4h6v3" />
+    </svg>
+  )
+}
+
 function App() {
   const [currentUser, setCurrentUser] = useState<AppUser | null>(null)
   const [theme, setTheme] = useState<ThemeMode>('light')
   const [noteViewMode, setNoteViewMode] = useState<NoteViewMode>('list')
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [navigationOpen, setNavigationOpen] = useState(false)
+  const [hasFolderOverflow, setHasFolderOverflow] = useState(false)
+  const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null)
+  const [expandedFolderIds, setExpandedFolderIds] = useState<Set<string>>(new Set())
+  const [folders, setFolders] = useState<Notebook[]>([])
+  const [isCreatingFolder, setIsCreatingFolder] = useState(false)
+  const [folderName, setFolderName] = useState('')
+  const [folderActionError, setFolderActionError] = useState<string | null>(null)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [authError, setAuthError] = useState<string | null>(null)
@@ -66,8 +102,12 @@ function App() {
   const pendingDraftRef = useRef<Note | null>(null)
   const longPressTimerRef = useRef<number | null>(null)
   const suppressNoteClickRef = useRef(false)
+  const suppressOutsideNoteClickRef = useRef(false)
+  const suppressOutsideNoteClickTimerRef = useRef<number | null>(null)
   const contextMenuRef = useRef<HTMLDivElement | null>(null)
   const settingsMenuRef = useRef<HTMLDetailsElement | null>(null)
+  const navigationDrawerRef = useRef<HTMLElement | null>(null)
+  const navigationScrollRef = useRef<HTMLDivElement | null>(null)
   const longPressOriginRef = useRef<{ x: number; y: number } | null>(null)
   const suppressNewNoteClickRef = useRef(false)
   const suppressNewNoteClickTimerRef = useRef<number | null>(null)
@@ -133,12 +173,34 @@ function App() {
       if (event.target instanceof Node && !settingsMenuRef.current?.contains(event.target)) {
         setSettingsOpen(false)
       }
+      if (
+        event.target instanceof Node &&
+        navigationDrawerRef.current?.classList.contains('is-open') &&
+        !navigationDrawerRef.current.contains(event.target)
+      ) {
+        const tappedNote =
+          event.target instanceof Element && event.target.closest('.note-item') !== null
+        if (tappedNote) {
+          cancelNoteLongPress()
+          suppressOutsideNoteClickRef.current = true
+          if (suppressOutsideNoteClickTimerRef.current !== null) {
+            window.clearTimeout(suppressOutsideNoteClickTimerRef.current)
+          }
+          suppressOutsideNoteClickTimerRef.current = window.setTimeout(() => {
+            suppressOutsideNoteClickRef.current = false
+            suppressOutsideNoteClickTimerRef.current = null
+          }, 800)
+        }
+        setNavigationOpen(false)
+      }
     }
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         setNoteMenu(null)
         setRenamingNoteId(null)
+        setNavigationOpen(false)
+        setSettingsOpen(false)
       }
     }
 
@@ -155,6 +217,9 @@ function App() {
       }
       if (suppressMenuClickTimerRef.current !== null) {
         window.clearTimeout(suppressMenuClickTimerRef.current)
+      }
+      if (suppressOutsideNoteClickTimerRef.current !== null) {
+        window.clearTimeout(suppressOutsideNoteClickTimerRef.current)
       }
     }
   }, [])
@@ -245,7 +310,9 @@ function App() {
   useEffect(() => {
     if (!currentUser) {
       setNotes([])
+      setFolders([])
       setSelectedId(null)
+      setSelectedFolderId(null)
       return
     }
 
@@ -274,8 +341,15 @@ function App() {
       const userNotes = storedNotes
         .filter((note) => note.user_id === currentUser.id)
         .sort((a, b) => b.updated_at.localeCompare(a.updated_at))
+      const storedNotebooks = (await db.notebooks.toArray())
+        .filter((notebook) => notebook.user_id === currentUser.id)
+        .sort((a, b) => a.name.localeCompare(b.name))
 
       setNotes(userNotes)
+      setFolders(storedNotebooks)
+      setExpandedFolderIds((previous) =>
+        new Set([...previous, ...storedNotebooks.map((notebook) => notebook.id)]),
+      )
 
       if (selectedId && !userNotes.some((note) => note.id === selectedId)) {
         setSelectedId(null)
@@ -294,7 +368,11 @@ function App() {
           const userNotes = storedNotes
             .filter((note) => note.user_id === currentUser.id)
             .sort((a, b) => b.updated_at.localeCompare(a.updated_at))
+          const storedNotebooks = (await db.notebooks.toArray())
+            .filter((notebook) => notebook.user_id === currentUser.id)
+            .sort((a, b) => a.name.localeCompare(b.name))
           setNotes(userNotes)
+          setFolders(storedNotebooks)
         })
       }
     }
@@ -316,6 +394,48 @@ function App() {
     () => notes.filter((note) => !note.deleted_at),
     [notes],
   )
+
+  useEffect(() => {
+    const scrollArea = navigationScrollRef.current
+    if (!scrollArea) {
+      return
+    }
+
+    const updateOverflow = () => {
+      setHasFolderOverflow(scrollArea.scrollHeight > scrollArea.clientHeight + 1)
+    }
+    const animationFrame = window.requestAnimationFrame(updateOverflow)
+    const resizeObserver = new ResizeObserver(updateOverflow)
+    resizeObserver.observe(scrollArea)
+    scrollArea.querySelectorAll(':scope > *').forEach((child) => resizeObserver.observe(child))
+    window.addEventListener('resize', updateOverflow)
+
+    return () => {
+      window.cancelAnimationFrame(animationFrame)
+      resizeObserver.disconnect()
+      window.removeEventListener('resize', updateOverflow)
+    }
+  }, [navigationOpen, folders.length, expandedFolderIds, isCreatingFolder, activeNotes.length])
+
+  const visibleNotes = useMemo(
+    () => activeNotes.filter((note) => note.notebook_id === selectedFolderId),
+    [activeNotes, selectedFolderId],
+  )
+
+  const folderNameById = useMemo(
+    () => new Map(folders.map((folder) => [folder.id, folder.name])),
+    [folders],
+  )
+
+  const notesByFolder = useMemo(() => {
+    const grouped = new Map<string, Note[]>()
+    for (const note of activeNotes) {
+      if (note.notebook_id) {
+        grouped.set(note.notebook_id, [...(grouped.get(note.notebook_id) ?? []), note])
+      }
+    }
+    return grouped
+  }, [activeNotes])
 
   const selectedNote = useMemo(
     () => activeNotes.find((note) => note.id === selectedId) ?? null,
@@ -416,11 +536,12 @@ function App() {
     })
   }
 
-  const createNote = async () => {
+  const createNote = async (notebookId: string | null = selectedFolderId) => {
     const userId = currentUser?.id ?? DEMO_USER_ID
     const newNote = createEmptyNote(userId)
     const readyNote: Note = {
       ...newNote,
+      notebook_id: notebookId,
       sync_status: 'pending',
     }
 
@@ -437,9 +558,57 @@ function App() {
 
     setNotes((previousNotes) => [readyNote, ...previousNotes])
     setSelectedId(readyNote.id)
+    setNavigationOpen(false)
 
     if (navigator.onLine && isSupabaseConfigured && currentUser) {
       void syncUserNotes(currentUser.id)
+    }
+  }
+
+  const handleCreateFolder = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    const name = folderName.trim()
+    if (!name) {
+      setFolderActionError('Enter a folder name.')
+      return
+    }
+    if (folders.some((folder) => folder.name.toLocaleLowerCase() === name.toLocaleLowerCase())) {
+      setFolderActionError('A folder with that name already exists.')
+      return
+    }
+
+    const notebook = createEmptyNotebook(currentUser?.id ?? DEMO_USER_ID, name)
+    setFolderActionError(null)
+    try {
+      await db.notebooks.put(notebook)
+    } catch (error) {
+      console.error('Unable to save the folder locally', error)
+      setFolderActionError(
+        error instanceof Error ? error.message : 'Unable to create the folder. Please try again.',
+      )
+      return
+    }
+
+    setFolders((previousFolders) =>
+      [...previousFolders, notebook].sort((a, b) => a.name.localeCompare(b.name)),
+    )
+    setExpandedFolderIds((previous) => new Set(previous).add(notebook.id))
+    setSelectedFolderId(notebook.id)
+    setSelectedId(null)
+    setFolderName('')
+    setIsCreatingFolder(false)
+
+    if (navigator.onLine && isSupabaseConfigured && currentUser) {
+      void syncUserNotes(currentUser.id).then(async () => {
+        const savedNotebook = await db.notebooks.get(notebook.id)
+        if (savedNotebook) {
+          setFolders((previousFolders) =>
+            previousFolders.map((folder) =>
+              folder.id === savedNotebook.id ? savedNotebook : folder,
+            ),
+          )
+        }
+      })
     }
   }
 
@@ -758,7 +927,7 @@ function App() {
 
   if (!currentUser && !isHydrating) {
     return (
-      <div className={`auth-shell ${themeClassName}`}>
+      <div className="auth-shell theme-dark">
         <div className="auth-card">
           <p className="eyebrow">Persistent session ready</p>
           <h1>Welcome back</h1>
@@ -816,7 +985,7 @@ function App() {
 
   if (isHydrating) {
     return (
-      <div className={`auth-shell ${themeClassName}`}>
+      <div className="auth-shell theme-dark">
         <div className="auth-card compact">
           <p>Loading your notes...</p>
         </div>
@@ -830,7 +999,7 @@ function App() {
       <header className="topbar">
         <div>
           <p className="eyebrow">Offline-first notes</p>
-          <h1>Notes</h1>
+          <h1>{selectedFolderId ? folderNameById.get(selectedFolderId) ?? 'General Notes' : 'General Notes'}</h1>
         </div>
 
         <div className="topbar-actions">
@@ -848,12 +1017,189 @@ function App() {
               <option value="grid">▦ Tiles</option>
             </select>
           </label>
+          <button
+            type="button"
+            className="navigation-toggle"
+            aria-label={navigationOpen ? 'Close sidebar' : 'Open sidebar'}
+            aria-expanded={navigationOpen}
+            aria-controls="navigation-drawer"
+            onClick={() => {
+              setSettingsOpen(false)
+              setNavigationOpen((open) => !open)
+            }}
+          >
+            <span className="hamburger-icon" aria-hidden="true"><i /><i /><i /></span>
+          </button>
+          <button type="button" className="primary-button" onClick={() => void createNote()}>
+            + New note
+          </button>
+        </div>
+      </header>
+
+      {navigationOpen ? (
+        <div className="navigation-backdrop" aria-hidden="true" />
+      ) : null}
+      <aside
+        ref={navigationDrawerRef}
+        id="navigation-drawer"
+        className={`navigation-drawer ${navigationOpen ? 'is-open' : ''}`}
+        aria-label="Notes navigation"
+        aria-hidden={!navigationOpen}
+      >
+        <div className="navigation-drawer-header">
+          <div>
+            <p className="eyebrow">Workspace</p>
+            <h2>Folders</h2>
+          </div>
+          <button
+            type="button"
+            className="navigation-close"
+            aria-label="Close sidebar"
+            onClick={() => setNavigationOpen(false)}
+          >
+            ×
+          </button>
+        </div>
+        <div
+          ref={navigationScrollRef}
+          className={`navigation-scroll-area ${hasFolderOverflow ? 'has-folder-overflow' : ''}`}
+        >
+          <button
+            type="button"
+            className={`navigation-general ${selectedFolderId === null ? 'is-selected' : ''}`}
+            onClick={() => {
+              setSelectedFolderId(null)
+              setSelectedId(null)
+              setNavigationOpen(false)
+            }}
+          >
+            <span aria-hidden="true">⌂</span>
+            <span>General Notes</span>
+            <span className="navigation-count">{activeNotes.filter((note) => !note.notebook_id).length}</span>
+          </button>
+          <div className="navigation-section-title">
+            <span>Folders</span>
+            <button
+              type="button"
+              className="navigation-add-folder"
+              aria-label="Create folder"
+              title="Create folder"
+              onClick={() => {
+                setFolderActionError(null)
+                setIsCreatingFolder(true)
+              }}
+            >
+              +
+            </button>
+          </div>
+          {isCreatingFolder ? (
+            <form className="folder-create-form" onSubmit={(event) => void handleCreateFolder(event)}>
+              <input
+                autoFocus
+                aria-label="New folder name"
+                placeholder="Folder name"
+                value={folderName}
+                maxLength={80}
+                onChange={(event) => setFolderName(event.target.value)}
+              />
+              <button type="submit" className="primary-button">Create</button>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => {
+                  setIsCreatingFolder(false)
+                  setFolderName('')
+                  setFolderActionError(null)
+                }}
+              >
+                Cancel
+              </button>
+            </form>
+          ) : null}
+          {folderActionError ? <p className="folder-error" role="alert">{folderActionError}</p> : null}
+          {folders.length === 0 && !isCreatingFolder ? (
+            <p className="navigation-empty">Your folders will appear here.</p>
+          ) : null}
+          {folders.map((folder) => {
+            const folderNotes = notesByFolder.get(folder.id) ?? []
+            const isExpanded = expandedFolderIds.has(folder.id)
+            return (
+              <div className="navigation-folder" key={folder.id}>
+                <div className="navigation-folder-row">
+                  <button
+                    type="button"
+                    className={`navigation-folder-select ${selectedFolderId === folder.id ? 'is-selected' : ''}`}
+                    onClick={() => {
+                      setSelectedFolderId(folder.id)
+                      setSelectedId(null)
+                      setNavigationOpen(false)
+                    }}
+                  >
+                    <span className="navigation-folder-icon" aria-hidden="true">▰</span>
+                    <span className="navigation-folder-name">{folder.name}</span>
+                    {folder.sync_status === 'error' ? (
+                      <span className="folder-sync-error" title="Folder sync needs attention">!</span>
+                    ) : null}
+                    <span className="navigation-count">{folderNotes.length}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="navigation-folder-action"
+                    aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${folder.name}`}
+                    aria-expanded={isExpanded}
+                    onClick={() => setExpandedFolderIds((previous) => {
+                      const next = new Set(previous)
+                      if (next.has(folder.id)) {
+                        next.delete(folder.id)
+                      } else {
+                        next.add(folder.id)
+                      }
+                      return next
+                    })}
+                  >
+                    {isExpanded ? '⌄' : '›'}
+                  </button>
+                  <button
+                    type="button"
+                    className="navigation-folder-action"
+                    aria-label={`Create note in ${folder.name}`}
+                    title={`Create note in ${folder.name}`}
+                    onClick={() => void createNote(folder.id)}
+                  >
+                    +
+                  </button>
+                </div>
+                {isExpanded ? (
+                  <div className="navigation-folder-notes">
+                    {folderNotes.length === 0 ? (
+                      <span className="navigation-empty-note">No notes yet</span>
+                    ) : folderNotes.map((note) => (
+                      <button
+                        type="button"
+                        key={note.id}
+                        className={`navigation-note ${selectedId === note.id ? 'is-selected' : ''}`}
+                        onClick={() => {
+                          setSelectedFolderId(folder.id)
+                          setSelectedId(note.id)
+                          setNavigationOpen(false)
+                        }}
+                      >
+                        <span aria-hidden="true">▤</span>
+                        <span>{note.title || 'Untitled note'}</span>
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            )
+          })}
+        </div>
+        <div className="navigation-settings-footer">
           <details
             ref={settingsMenuRef}
-            className="settings-menu"
+            className="settings-menu navigation-settings"
             open={settingsOpen}
             onToggle={(event) => setSettingsOpen(event.currentTarget.open)}
-            onMouseLeave={() => setSettingsOpen(false)}
           >
             <summary
               aria-label="Settings"
@@ -864,7 +1210,8 @@ function App() {
               }}
             >
               <span aria-hidden="true">⚙️</span>
-              <span className="settings-label">Settings</span>
+              <span>Settings</span>
+              <span className="settings-chevron" aria-hidden="true">⌃</span>
             </summary>
             <div className="settings-panel">
               <div className="settings-row">
@@ -872,10 +1219,7 @@ function App() {
                 <button
                   type="button"
                   className="secondary-button theme-icon-button"
-                  onClick={() => {
-                    setSettingsOpen(false)
-                    void handleThemeToggle()
-                  }}
+                  onClick={() => void handleThemeToggle()}
                   aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
                   title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
                 >
@@ -898,6 +1242,7 @@ function App() {
                 className="secondary-button settings-sign-out"
                 onClick={() => {
                   setSettingsOpen(false)
+                  setNavigationOpen(false)
                   void handleSignOut()
                 }}
               >
@@ -905,11 +1250,8 @@ function App() {
               </button>
             </div>
           </details>
-          <button type="button" className="primary-button" onClick={createNote}>
-            + New note
-          </button>
         </div>
-      </header>
+      </aside>
 
       {noteActionError ? (
         <p className="app-error" role="alert">{noteActionError}</p>
@@ -929,15 +1271,15 @@ function App() {
           </div>
 
           <div className={`note-list ${noteViewMode === 'grid' ? 'grid-view' : 'list-view'}`}>
-            {activeNotes.length === 0 ? (
+            {visibleNotes.length === 0 ? (
               <div className="empty-state">
                 <p>No notes yet</p>
-                <button type="button" className="secondary-button" onClick={createNote}>
+                <button type="button" className="secondary-button" onClick={() => void createNote()}>
                   Create one
                 </button>
               </div>
             ) : (
-              activeNotes.map((note) => (
+              visibleNotes.map((note) => (
                 <button
                   key={note.id}
                   type="button"
@@ -950,6 +1292,17 @@ function App() {
                   onPointerMove={handleNotePointerMove}
                   onPointerUp={cancelNoteLongPress}
                   onPointerCancel={cancelNoteLongPress}
+                  onClickCapture={(event) => {
+                    if (suppressOutsideNoteClickRef.current) {
+                      suppressOutsideNoteClickRef.current = false
+                      if (suppressOutsideNoteClickTimerRef.current !== null) {
+                        window.clearTimeout(suppressOutsideNoteClickTimerRef.current)
+                        suppressOutsideNoteClickTimerRef.current = null
+                      }
+                      event.preventDefault()
+                      event.stopPropagation()
+                    }
+                  }}
                   onContextMenu={(event) => {
                     event.preventDefault()
                     openNoteMenu(note.id, event.clientX, event.clientY)
@@ -1008,7 +1361,7 @@ function App() {
                   aria-label="Delete note"
                   title="Delete note"
                 >
-                  🗑️
+                  <TrashIcon />
                 </button>
               </div>
 
@@ -1069,7 +1422,7 @@ function App() {
               }
               onClick={() => handleNoteMenuActionClick('delete', noteMenu.noteId)}
             >
-              🗑️
+              <TrashIcon />
             </button>
           </div>
         ) : null}
