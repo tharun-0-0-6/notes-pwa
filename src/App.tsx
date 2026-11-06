@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 
 import './App.css'
 import { db, seedDefaultSettings } from './lib/db'
@@ -10,6 +11,11 @@ const DEMO_USER_ID = 'demo-user'
 const DEMO_USER_NAME = 'Demo user'
 type ThemeMode = 'light' | 'dark'
 type NoteViewMode = 'list' | 'grid'
+type NoteMenuState = {
+  noteId: string
+  x: number
+  y: number
+}
 
 const createEmptyNote = (userId: string): Note => {
   const now = new Date().toISOString()
@@ -41,6 +47,10 @@ function App() {
   const [password, setPassword] = useState('')
   const [authError, setAuthError] = useState<string | null>(null)
   const [authNotice, setAuthNotice] = useState<string | null>(null)
+  const [noteActionError, setNoteActionError] = useState<string | null>(null)
+  const [noteMenu, setNoteMenu] = useState<NoteMenuState | null>(null)
+  const [renamingNoteId, setRenamingNoteId] = useState<string | null>(null)
+  const [renameValue, setRenameValue] = useState('')
   const [authLoading, setAuthLoading] = useState(false)
   const [notes, setNotes] = useState<Note[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -53,7 +63,93 @@ function App() {
   const saveTimeoutRef = useRef<number | null>(null)
   const notesRef = useRef<Note[]>([])
   const pendingDraftRef = useRef<Note | null>(null)
+  const longPressTimerRef = useRef<number | null>(null)
+  const suppressNoteClickRef = useRef(false)
+  const contextMenuRef = useRef<HTMLDivElement | null>(null)
+  const longPressOriginRef = useRef<{ x: number; y: number } | null>(null)
+  const suppressNewNoteClickRef = useRef(false)
+  const suppressNewNoteClickTimerRef = useRef<number | null>(null)
+  const suppressMenuClickRef = useRef(false)
+  const suppressMenuClickTimerRef = useRef<number | null>(null)
   const themeClassName = theme === 'dark' ? 'theme-dark' : 'theme-light'
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme
+  }, [theme])
+
+  const openNoteMenu = (noteId: string, x: number, y: number) => {
+    setNoteMenu({
+      noteId,
+      x: Math.max(8, Math.min(x, window.innerWidth - 188)),
+      y: Math.max(8, Math.min(y, window.innerHeight - 108)),
+    })
+  }
+
+  const handleNotePointerDown = (
+    event: React.PointerEvent<HTMLButtonElement>,
+    noteId: string,
+  ) => {
+    suppressNoteClickRef.current = false
+    if (event.pointerType !== 'touch') {
+      return
+    }
+
+    longPressOriginRef.current = { x: event.clientX, y: event.clientY }
+    longPressTimerRef.current = window.setTimeout(() => {
+      suppressNoteClickRef.current = true
+      openNoteMenu(noteId, event.clientX, event.clientY)
+      longPressTimerRef.current = null
+    }, 550)
+  }
+
+  const cancelNoteLongPress = () => {
+    if (longPressTimerRef.current !== null) {
+      window.clearTimeout(longPressTimerRef.current)
+      longPressTimerRef.current = null
+    }
+    longPressOriginRef.current = null
+  }
+
+  const handleNotePointerMove = (event: React.PointerEvent<HTMLButtonElement>) => {
+    const origin = longPressOriginRef.current
+    if (
+      origin &&
+      (Math.abs(event.clientX - origin.x) > 12 || Math.abs(event.clientY - origin.y) > 12)
+    ) {
+      cancelNoteLongPress()
+    }
+  }
+
+  useEffect(() => {
+    const handlePointerDown = (event: PointerEvent) => {
+      if (event.target instanceof Node && !contextMenuRef.current?.contains(event.target)) {
+        setNoteMenu(null)
+      }
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setNoteMenu(null)
+        setRenamingNoteId(null)
+      }
+    }
+
+    document.addEventListener('pointerdown', handlePointerDown)
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown)
+      document.removeEventListener('keydown', handleKeyDown)
+      if (longPressTimerRef.current !== null) {
+        window.clearTimeout(longPressTimerRef.current)
+      }
+      if (suppressNewNoteClickTimerRef.current !== null) {
+        window.clearTimeout(suppressNewNoteClickTimerRef.current)
+      }
+      if (suppressMenuClickTimerRef.current !== null) {
+        window.clearTimeout(suppressMenuClickTimerRef.current)
+      }
+    }
+  }, [])
 
   useEffect(() => {
     let active = true
@@ -320,15 +416,47 @@ function App() {
       sync_status: 'pending',
     }
 
-    await saveNoteLocally(readyNote, 'create')
-
-    if (navigator.onLine && isSupabaseConfigured && currentUser) {
-      await syncUserNotes(currentUser.id)
+    setNoteActionError(null)
+    try {
+      await saveNoteLocally(readyNote, 'create')
+    } catch (error) {
+      console.error('Unable to save the new note locally', error)
+      setNoteActionError(
+        error instanceof Error ? error.message : 'Unable to create a note. Please try again.',
+      )
+      return
     }
 
-    const savedNote = (await db.notes.get(readyNote.id)) ?? readyNote
-    setNotes((previousNotes) => [savedNote, ...previousNotes])
+    setNotes((previousNotes) => [readyNote, ...previousNotes])
     setSelectedId(readyNote.id)
+
+    if (navigator.onLine && isSupabaseConfigured && currentUser) {
+      void syncUserNotes(currentUser.id)
+    }
+  }
+
+  const handleNewNoteTouchEnd = () => {
+    suppressNewNoteClickRef.current = true
+    if (suppressNewNoteClickTimerRef.current !== null) {
+      window.clearTimeout(suppressNewNoteClickTimerRef.current)
+    }
+    suppressNewNoteClickTimerRef.current = window.setTimeout(() => {
+      suppressNewNoteClickRef.current = false
+      suppressNewNoteClickTimerRef.current = null
+    }, 800)
+    void createNote()
+  }
+
+  const handleNewNoteClick = () => {
+    if (suppressNewNoteClickRef.current) {
+      suppressNewNoteClickRef.current = false
+      if (suppressNewNoteClickTimerRef.current !== null) {
+        window.clearTimeout(suppressNewNoteClickTimerRef.current)
+        suppressNewNoteClickTimerRef.current = null
+      }
+      return
+    }
+    void createNote()
   }
 
   const persistNoteChange = (nextNote: Note) => {
@@ -406,7 +534,7 @@ function App() {
   }
 
   const handleDelete = async (noteId: string) => {
-    const target = notes.find((note) => note.id === noteId)
+    const target = notesRef.current.find((note) => note.id === noteId)
 
     if (!target) {
       return
@@ -420,20 +548,117 @@ function App() {
       version: target.version + 1,
     }
 
-    await saveNoteLocally(updatedNote, 'delete')
-
-    if (navigator.onLine && isSupabaseConfigured && currentUser) {
-      await syncUserNotes(currentUser.id)
+    try {
+      await saveNoteLocally(updatedNote, 'delete')
+    } catch (error) {
+      console.error('Unable to delete the note locally', error)
+      setNoteActionError(
+        error instanceof Error ? error.message : 'Unable to delete this note. Please try again.',
+      )
+      return
     }
 
-    const nextNotes = notes
-      .map((note) => (note.id === noteId ? updatedNote : note))
-      .filter((note) => !note.deleted_at)
-
+    const nextNotes = notesRef.current.filter((note) => note.id !== noteId)
+    notesRef.current = nextNotes
     setNotes(nextNotes)
 
     if (selectedId === noteId) {
       setSelectedId(null)
+    }
+
+    if (navigator.onLine && isSupabaseConfigured && currentUser) {
+      void syncUserNotes(currentUser.id)
+    }
+  }
+
+  const beginRename = (noteId: string) => {
+    const noteToRename = notesRef.current.find((note) => note.id === noteId)
+    if (noteToRename) {
+      setRenameValue(noteToRename.title)
+      setRenamingNoteId(noteToRename.id)
+    }
+    setNoteMenu(null)
+  }
+
+  const activateNoteMenuAction = (action: 'rename' | 'delete', noteId: string) => {
+    if (action === 'rename') {
+      beginRename(noteId)
+    } else {
+      void handleDelete(noteId)
+      setNoteMenu(null)
+    }
+  }
+
+  const handleNoteMenuActionTouchEnd = (
+    event: React.TouchEvent<HTMLButtonElement>,
+    action: 'rename' | 'delete',
+    noteId: string,
+  ) => {
+    event.stopPropagation()
+    suppressMenuClickRef.current = true
+    if (suppressMenuClickTimerRef.current !== null) {
+      window.clearTimeout(suppressMenuClickTimerRef.current)
+    }
+    suppressMenuClickTimerRef.current = window.setTimeout(() => {
+      suppressMenuClickRef.current = false
+      suppressMenuClickTimerRef.current = null
+    }, 800)
+    activateNoteMenuAction(action, noteId)
+  }
+
+  const handleNoteMenuActionClick = (action: 'rename' | 'delete', noteId: string) => {
+    if (suppressMenuClickRef.current) {
+      suppressMenuClickRef.current = false
+      if (suppressMenuClickTimerRef.current !== null) {
+        window.clearTimeout(suppressMenuClickTimerRef.current)
+        suppressMenuClickTimerRef.current = null
+      }
+      return
+    }
+    activateNoteMenuAction(action, noteId)
+  }
+
+  const handleRename = async (noteId: string, title: string) => {
+    const target = notesRef.current.find((note) => note.id === noteId)
+    if (!target) {
+      return
+    }
+
+    const updatedNote: Note = {
+      ...target,
+      title,
+      updated_at: new Date().toISOString(),
+      version: target.version + 1,
+      sync_status: 'pending',
+    }
+
+    try {
+      await saveNoteLocally(updatedNote, 'update')
+    } catch (error) {
+      console.error('Unable to rename the note locally', error)
+      setNoteActionError(
+        error instanceof Error ? error.message : 'Unable to rename this note. Please try again.',
+      )
+      return
+    }
+
+    const nextNotes = notesRef.current
+      .map((note) => note.id === noteId ? updatedNote : note)
+      .sort((a, b) => b.updated_at.localeCompare(a.updated_at))
+    notesRef.current = nextNotes
+    setNotes(nextNotes)
+    if (selectedId === noteId) {
+      setDraftTitle(title)
+      pendingDraftRef.current = null
+      if (saveTimeoutRef.current !== null) {
+        window.clearTimeout(saveTimeoutRef.current)
+        saveTimeoutRef.current = null
+      }
+    }
+    setRenamingNoteId(null)
+
+    if (navigator.onLine && isSupabaseConfigured && currentUser) {
+      void syncUserNotes(currentUser.id)
     }
   }
 
@@ -560,9 +785,6 @@ function App() {
           {authNotice ? <p className="auth-note" role="status">{authNotice}</p> : null}
 
           <div className="auth-actions">
-            <button type="button" className="secondary-button" onClick={() => void handleThemeToggle()}>
-              {theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-            </button>
             <button type="button" className="primary-button" onClick={handleCloudSignIn} disabled={authLoading}>
               {authLoading ? 'Please wait...' : 'Sign in'}
             </button>
@@ -595,6 +817,7 @@ function App() {
   }
 
   return (
+    <>
     <div className={`app-shell ${themeClassName} ${selectedNote ? 'mobile-note-open' : ''}`}>
       <header className="topbar">
         <div>
@@ -603,38 +826,63 @@ function App() {
         </div>
 
         <div className="topbar-actions">
-          <button type="button" className="secondary-button" onClick={() => void handleThemeToggle()}>
-            {theme === 'dark' ? 'Light mode' : 'Dark mode'}
-          </button>
-          <div className="view-toggle" role="group" aria-label="Note layout">
-            <button
-              type="button"
-              className={`secondary-button ${noteViewMode === 'list' ? 'active' : ''}`}
-              aria-pressed={noteViewMode === 'list'}
-              onClick={() => void handleNoteViewModeChange('list')}
+          <label className="view-select-wrap">
+            <span className="visually-hidden">Note layout</span>
+            <select
+              className="view-select"
+              aria-label="Note layout"
+              value={noteViewMode}
+              onChange={(event) =>
+                void handleNoteViewModeChange(event.target.value === 'grid' ? 'grid' : 'list')
+              }
             >
-              List
-            </button>
-            <button
-              type="button"
-              className={`secondary-button ${noteViewMode === 'grid' ? 'active' : ''}`}
-              aria-pressed={noteViewMode === 'grid'}
-              onClick={() => void handleNoteViewModeChange('grid')}
-            >
-              Tiles
-            </button>
-          </div>
-          <span className={`status-pill ${online ? 'online' : 'offline'}`}>
-            {online ? 'Online' : 'Offline'}
-          </span>
-          <button type="button" className="secondary-button" onClick={handleSignOut}>
-            Sign out
-          </button>
+              <option value="list">☰ List</option>
+              <option value="grid">▦ Tiles</option>
+            </select>
+          </label>
+          <details className="settings-menu">
+            <summary aria-label="Settings" title="Settings">
+              <span aria-hidden="true">⚙️</span>
+              <span className="settings-label">Settings</span>
+            </summary>
+            <div className="settings-panel">
+              <div className="settings-row">
+                <span>Appearance</span>
+                <button
+                  type="button"
+                  className="secondary-button theme-icon-button"
+                  onClick={() => void handleThemeToggle()}
+                  aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+                  title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+                >
+                  {theme === 'dark' ? '☀️' : '🌙'}
+                </button>
+              </div>
+              <div className="settings-row">
+                <span>Connection</span>
+                <span
+                  className={`connection-indicator ${online ? 'online' : 'offline'}`}
+                  role="status"
+                  aria-label={online ? 'Online' : 'Offline'}
+                  title={online ? 'Online' : 'Offline'}
+                >
+                  {online ? '🟢' : '🟠'}
+                </span>
+              </div>
+              <button type="button" className="secondary-button settings-sign-out" onClick={handleSignOut}>
+                Sign out
+              </button>
+            </div>
+          </details>
           <button type="button" className="primary-button" onClick={createNote}>
             + New note
           </button>
         </div>
       </header>
+
+      {noteActionError ? (
+        <p className="app-error" role="alert">{noteActionError}</p>
+      ) : null}
 
       <div
         className={[
@@ -662,8 +910,27 @@ function App() {
                 <button
                   key={note.id}
                   type="button"
-                  className={`note-item ${selectedId === note.id ? 'selected' : ''}`}
-                  onClick={() => setSelectedId(note.id)}
+                  className={[
+                    'note-item',
+                    selectedId === note.id ? 'selected' : '',
+                    noteMenu?.noteId === note.id ? 'context-open' : '',
+                  ].filter(Boolean).join(' ')}
+                  onPointerDown={(event) => handleNotePointerDown(event, note.id)}
+                  onPointerMove={handleNotePointerMove}
+                  onPointerUp={cancelNoteLongPress}
+                  onPointerCancel={cancelNoteLongPress}
+                  onContextMenu={(event) => {
+                    event.preventDefault()
+                    openNoteMenu(note.id, event.clientX, event.clientY)
+                  }}
+                  onClick={(event) => {
+                    if (suppressNoteClickRef.current) {
+                      suppressNoteClickRef.current = false
+                      event.preventDefault()
+                      return
+                    }
+                    setSelectedId(note.id)
+                  }}
                 >
                   <span className="note-item-title">
                     {note.title || 'Untitled note'}
@@ -737,6 +1004,92 @@ function App() {
         </main>
       </div>
     </div>
+    {createPortal(
+      <>
+        {noteMenu ? (
+          <div
+            ref={contextMenuRef}
+            className={`note-context-menu ${themeClassName}`}
+            role="menu"
+            aria-label="Note options"
+            style={{ left: noteMenu.x, top: noteMenu.y }}
+            onContextMenu={(event) => event.preventDefault()}
+          >
+            <button
+              type="button"
+              role="menuitem"
+              onTouchEnd={(event) =>
+                handleNoteMenuActionTouchEnd(event, 'rename', noteMenu.noteId)
+              }
+              onClick={() => handleNoteMenuActionClick('rename', noteMenu.noteId)}
+            >
+              Rename
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              className="note-context-delete"
+              onTouchEnd={(event) =>
+                handleNoteMenuActionTouchEnd(event, 'delete', noteMenu.noteId)
+              }
+              onClick={() => handleNoteMenuActionClick('delete', noteMenu.noteId)}
+            >
+              Delete
+            </button>
+          </div>
+        ) : null}
+        {renamingNoteId ? (
+          <div
+            className="rename-dialog-backdrop"
+            onClick={() => setRenamingNoteId(null)}
+          >
+            <form
+              className={`rename-dialog ${themeClassName}`}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="rename-dialog-title"
+              onSubmit={(event) => {
+                event.preventDefault()
+                void handleRename(renamingNoteId, renameValue)
+              }}
+              onClick={(event) => event.stopPropagation()}
+            >
+              <h2 id="rename-dialog-title">Rename note</h2>
+              <label htmlFor="rename-note-input">Note title</label>
+              <input
+                id="rename-note-input"
+                autoFocus
+                value={renameValue}
+                onChange={(event) => setRenameValue(event.target.value)}
+                maxLength={200}
+              />
+              <div className="rename-dialog-actions">
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={() => setRenamingNoteId(null)}
+                >
+                  Cancel
+                </button>
+                <button type="submit" className="primary-button">Save</button>
+              </div>
+            </form>
+          </div>
+        ) : null}
+        <button
+          type="button"
+          className={`mobile-new-note ${themeClassName} ${selectedNote ? 'is-hidden' : ''}`}
+          onTouchEnd={handleNewNoteTouchEnd}
+          onClick={handleNewNoteClick}
+          aria-label="Create a new note"
+          title="Create a new note"
+        >
+          +
+        </button>
+      </>,
+      document.body,
+    )}
+    </>
   )
 }
 

@@ -39,6 +39,13 @@ This project is now in the implementation baseline phase. The app foundation has
 - production app, manifest, service-worker, and icon endpoints returned successfully; physical iOS/Android installation is still pending because this environment has no connected mobile device or ADB bridge
 - mobile app navigation now starts on the notes home and opens a full-screen editor only after selecting a note; a back control returns home
 - persistent List/Tiles layout preference added for desktop and mobile, with responsive note previews in tile mode
+- compact Settings menu added with sign-out and emoji theme control; connection state uses accessible green online/orange offline indicators in the menu on desktop and mobile
+- mobile toolbar now uses an emoji-only Settings control and a List/Tiles dropdown; New Note is a floating action button, and the document background follows the active theme
+- new notes open immediately after local persistence while cloud sync continues in the background; mobile title, layout selector, and Settings control share one header row
+- removed the theme toggle from the sign-in screen; elevated the mobile New Note button above page content and verified it opens the editor at a phone-sized viewport
+- note cards support touch-and-hold actions on phones and right-click actions on desktop for rename/delete in List and Tiles modes; the mobile New Note button is portaled to the document layer
+- mobile New Note now creates on touch pointer-up as well as click, uses a high-priority safe-area-aware document-layer target, and note actions animate/highlight without allowing browser text selection
+- added explicit iOS touchend handling for New Note, Rename, and Delete with click deduplication; touch-event browser emulation verified all three, while the production deployment still needs updating before a physical iPhone receives these changes
 - Git repository and origin remote are configured; GitHub CLI is not authenticated in the current environment, and Vercel CLI is unavailable
 
 ### Confirmed direction
@@ -105,6 +112,8 @@ This project is now in the implementation baseline phase. The app foundation has
 - deployed login page and PWA metadata checked at common phone, tablet, and desktop viewport sizes
 - physical iOS/Android PWA installation and offline/reconnect checks remain for device owners; exact manual steps are in `docs/deployment-checklist.md`
 - responsive home/detail navigation and saved list/tile preference verified in mobile and desktop browser viewports
+- Settings menu, theme emoji toggle, and online/offline indicator verified at mobile and desktop viewport sizes
+- mobile toolbar compacting, floating New Note button, dropdown layout selector, and theme-aware document background implemented; build and lint pass
 
 ### Not started yet
 - confirmation that production Row Level Security policies are enabled and correct in the live Supabase project
