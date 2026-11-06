@@ -291,6 +291,14 @@ html[data-theme='light'] {
   align-content: start;
 }
 
+.note-list.grid-view .note-item {
+  min-height: 160px;
+}
+
+.note-list.grid-view .note-item-details {
+  margin-top: auto;
+}
+
 .note-list.grid-view .empty-state {
   grid-column: 1 / -1;
 }
@@ -960,7 +968,7 @@ html[data-theme='light'] {
   }
 
   .note-list.grid-view .note-item {
-    min-height: 130px;
+    min-height: 150px;
   }
 
   .workspace.note-open .editor-header .editor-back,

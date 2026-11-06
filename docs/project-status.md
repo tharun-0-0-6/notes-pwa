@@ -39,6 +39,7 @@ This project is now in the implementation baseline phase. The app foundation has
 - production app, manifest, service-worker, and icon endpoints returned successfully; physical iOS/Android installation is still pending because this environment has no connected mobile device or ADB bridge
 - mobile app navigation now starts on the notes home and opens a full-screen editor only after selecting a note; a back control returns home
 - persistent List/Tiles layout preference added for desktop and mobile, with responsive note previews in tile mode
+- tile cards have a consistent minimum height and keep date/sync status pinned to the bottom even when note content is empty
 - compact Settings menu added with sign-out and emoji theme control; connection state uses accessible green online/orange offline indicators in the menu on desktop and mobile
 - mobile toolbar now uses an emoji-only Settings control and a List/Tiles dropdown; New Note is a floating action button, and the document background follows the active theme
 - new notes open immediately after local persistence while cloud sync continues in the background; mobile title, layout selector, and Settings control share one header row
