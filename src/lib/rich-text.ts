@@ -96,11 +96,31 @@ function sanitizeNode(node: Node, output: Document) {
 
   const element = output.createElement(node.tagName === 'FONT' ? 'span' : node.tagName.toLowerCase())
   if (node.tagName === 'UL' || node.tagName === 'OL') {
-    if (node.classList.contains('note-list-dashed')) {
-      element.className = 'note-list-dashed'
+    if (node.classList.contains('note-list-dashed') || node.classList.contains('note-list-checkbox')) {
+      element.className = node.classList.contains('note-list-checkbox')
+        ? 'note-list-checkbox'
+        : 'note-list-dashed'
+    }
+    if (node.tagName === 'OL') {
+      const start = node.getAttribute('start')
+      if (start && /^-?\d+$/.test(start)) {
+        element.setAttribute('start', start)
+      }
     }
   }
-
+  if (node.tagName === 'LI' && node.getAttribute('data-checked') === 'true') {
+    element.setAttribute('data-checked', 'true')
+  }
+  if (node.tagName === 'SPAN' && node.classList.contains('note-checkbox-marker')) {
+    element.className = 'note-checkbox-marker'
+    element.setAttribute('contenteditable', 'false')
+    element.setAttribute('role', 'checkbox')
+    element.setAttribute(
+      'aria-checked',
+      node.parentElement?.getAttribute('data-checked') === 'true' ? 'true' : 'false',
+    )
+    element.setAttribute('tabindex', '0')
+  }
   const style = cleanStyle(node.getAttribute('style') ?? '')
   if (style) {
     element.setAttribute('style', style)

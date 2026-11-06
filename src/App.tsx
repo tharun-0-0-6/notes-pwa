@@ -22,7 +22,7 @@ type NoteLockDialogMode = 'create' | 'change' | 'recover'
 type NoteMenuAction = 'rename' | 'delete' | 'pin' | 'lock'
 type NoteLockActionState = {
   noteId: string
-  mode: 'lock' | 'unlock'
+  mode: 'lock' | 'unlock' | 'remove-lock'
   openAfterUnlock: boolean
 }
 type NoteMenuState = {
@@ -32,7 +32,9 @@ type NoteMenuState = {
 }
 type EditorToolbarPanel = 'text' | 'lists' | null
 type InlineFormat = 'bold' | 'italic' | 'underline'
-type NoteListFormat = 'bullet' | 'numbered' | 'dashed'
+type NoteListFormat = 'bullet' | 'numbered' | 'dashed' | 'checkbox'
+
+const DEVICE_USER_SETTING_KEY = 'device-user'
 
 const createEmptyNote = (userId: string): Note => {
   const now = new Date().toISOString()
@@ -436,11 +438,69 @@ function App() {
       }
     }
 
+    const restoreDeviceUser = async () => {
+      try {
+        const setting = await db.settings.get(DEVICE_USER_SETTING_KEY)
+        if (typeof setting?.value !== 'string') {
+          return null
+        }
+
+        const cachedUser: unknown = JSON.parse(setting.value)
+        if (
+          !cachedUser ||
+          typeof cachedUser !== 'object' ||
+          !('id' in cachedUser) ||
+          typeof cachedUser.id !== 'string' ||
+          !('email' in cachedUser) ||
+          typeof cachedUser.email !== 'string' ||
+          !('name' in cachedUser) ||
+          typeof cachedUser.name !== 'string'
+        ) {
+          throw new Error('Stored device account settings are invalid.')
+        }
+        return {
+          id: cachedUser.id,
+          email: cachedUser.email,
+          name: cachedUser.name,
+        }
+      } catch (error) {
+        console.error('Unable to restore the device account', error)
+        return null
+      }
+    }
+
+    const cacheDeviceUser = (user: AppUser) => {
+      void db.settings.put({
+        key: DEVICE_USER_SETTING_KEY,
+        value: JSON.stringify(user),
+        updated_at: new Date().toISOString(),
+      }).catch((error: unknown) => {
+        console.error('Unable to save the device account', error)
+      })
+    }
+
     const {
       data: { subscription },
-    } = authClient.auth.onAuthStateChange((_event, session) => {
+    } = authClient.auth.onAuthStateChange((event, session) => {
       if (active) {
-        setCurrentUser(normaliseSupabaseUser(session?.user ?? null))
+        const user = normaliseSupabaseUser(session?.user ?? null)
+        if (user) {
+          cacheDeviceUser(user)
+          setCurrentUser(user)
+        } else if (event === 'SIGNED_OUT' && navigator.onLine) {
+          void db.settings.delete(DEVICE_USER_SETTING_KEY).catch((error: unknown) => {
+            console.error('Unable to clear the device account', error)
+          })
+          setCurrentUser(null)
+        } else if (!navigator.onLine) {
+          void restoreDeviceUser().then((cachedUser) => {
+            if (active && cachedUser) {
+              setCurrentUser(cachedUser)
+            }
+          })
+        } else {
+          setCurrentUser(null)
+        }
       }
     })
 
@@ -456,13 +516,29 @@ function App() {
         }
 
         if (active) {
-          setCurrentUser(normaliseSupabaseUser(session?.user ?? null))
+          const user = normaliseSupabaseUser(session?.user ?? null)
+          if (user) {
+            cacheDeviceUser(user)
+            setCurrentUser(user)
+          } else if (!navigator.onLine) {
+            setCurrentUser(await restoreDeviceUser())
+          } else {
+            void db.settings.delete(DEVICE_USER_SETTING_KEY).catch((deleteError: unknown) => {
+              console.error('Unable to clear the device account', deleteError)
+            })
+            setCurrentUser(null)
+          }
         }
       } catch (error) {
         if (active) {
-          setAuthError(
-            error instanceof Error ? error.message : 'Unable to restore your session.',
-          )
+          const cachedUser = await restoreDeviceUser()
+          if (cachedUser) {
+            setCurrentUser(cachedUser)
+          } else {
+            setAuthError(
+              error instanceof Error ? error.message : 'Unable to restore your session.',
+            )
+          }
         }
       } finally {
         if (active) {
@@ -905,7 +981,7 @@ function App() {
       const isLocked = target.metadata_json.note_locked === true
       setNoteLockAction({
         noteId,
-        mode: isLocked && !unlockedNoteIds.has(noteId) ? 'unlock' : 'lock',
+        mode: isLocked ? 'remove-lock' : 'lock',
         openAfterUnlock: false,
       })
       setNoteLockActionPassword('')
@@ -948,6 +1024,13 @@ function App() {
         if (noteLockAction.openAfterUnlock) {
           setSelectedId(target.id)
         }
+      } else if (noteLockAction.mode === 'remove-lock') {
+        await updateNoteMetadata(target, { isLocked: false })
+        setUnlockedNoteIds((current) => {
+          const next = new Set(current)
+          next.delete(target.id)
+          return next
+        })
       } else {
         await updateNoteMetadata(target, { isLocked: true })
         setUnlockedNoteIds((current) => {
@@ -1303,6 +1386,38 @@ function App() {
     }
   }
 
+  const normalizeEditorLists = (editor: HTMLDivElement) => {
+    editor.querySelectorAll('li[value]').forEach((listItem) => {
+      listItem.removeAttribute('value')
+    })
+    editor.querySelectorAll<HTMLLIElement>('ul.note-list-checkbox > li').forEach((listItem) => {
+      if (!listItem.querySelector(':scope > .note-checkbox-marker')) {
+        const marker = document.createElement('span')
+        marker.className = 'note-checkbox-marker'
+        marker.contentEditable = 'false'
+        marker.setAttribute('role', 'checkbox')
+        marker.setAttribute('aria-checked', listItem.dataset.checked === 'true' ? 'true' : 'false')
+        marker.tabIndex = 0
+        listItem.prepend(marker)
+      }
+    })
+    editor.querySelectorAll('ul:not(.note-list-checkbox) .note-checkbox-marker').forEach((marker) => {
+      marker.remove()
+    })
+
+    editor.querySelectorAll('ol').forEach((list) => {
+      let next = list.nextElementSibling
+      while (next?.tagName === 'OL') {
+        while (next.firstChild) {
+          list.append(next.firstChild)
+        }
+        const mergedList = next
+        next = next.nextElementSibling
+        mergedList.remove()
+      }
+    })
+  }
+
   const restoreEditorSelection = () => {
     const editor = richTextEditorRef.current
     const range = editorSelectionRangeRef.current
@@ -1330,9 +1445,72 @@ function App() {
     if (!editor) {
       return
     }
+    normalizeEditorLists(editor)
     handleContentChange(editor.innerHTML)
     captureEditorSelection()
     refreshInlineFormatState()
+  }
+
+  const toggleCheckboxListItem = (listItem: Element) => {
+    const checked = listItem.getAttribute('data-checked') !== 'true'
+    if (checked) {
+      listItem.setAttribute('data-checked', 'true')
+    } else {
+      listItem.removeAttribute('data-checked')
+    }
+    listItem.querySelector(':scope > .note-checkbox-marker')
+      ?.setAttribute('aria-checked', checked ? 'true' : 'false')
+    persistRichEditorContent()
+  }
+
+  const handleEditorKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === ' ' && event.target instanceof Element) {
+      const marker = event.target.closest('.note-checkbox-marker')
+      const listItem = marker?.closest('li')
+      if (listItem) {
+        event.preventDefault()
+        toggleCheckboxListItem(listItem)
+      }
+      return
+    }
+
+    if (event.key !== 'Enter' || !event.shiftKey) {
+      return
+    }
+
+    const editor = richTextEditorRef.current
+    const selection = window.getSelection()
+    if (!editor || !selection?.rangeCount) {
+      return
+    }
+
+    const range = selection.getRangeAt(0)
+    if (!editor.contains(range.commonAncestorContainer)) {
+      return
+    }
+
+    event.preventDefault()
+    range.deleteContents()
+    const lineBreak = document.createElement('br')
+    range.insertNode(lineBreak)
+    range.setStartAfter(lineBreak)
+    range.collapse(true)
+    selection.removeAllRanges()
+    selection.addRange(range)
+    persistRichEditorContent()
+  }
+
+  const handleEditorClick = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (!(event.target instanceof Element)) {
+      return
+    }
+    const marker = event.target.closest('.note-checkbox-marker')
+    const listItem = marker?.closest('li')
+    if (!marker || !listItem) {
+      return
+    }
+
+    toggleCheckboxListItem(listItem)
   }
 
   const handleEditorPaste = (event: React.ClipboardEvent<HTMLDivElement>) => {
@@ -1422,9 +1600,11 @@ function App() {
     const currentFormat: NoteListFormat | null = containingList
       ? containingList.tagName === 'OL'
         ? 'numbered'
-        : containingList.classList.contains('note-list-dashed')
-          ? 'dashed'
-          : 'bullet'
+        : containingList.classList.contains('note-list-checkbox')
+          ? 'checkbox'
+          : containingList.classList.contains('note-list-dashed')
+            ? 'dashed'
+            : 'bullet'
       : null
 
     if (containingList && listItem) {
@@ -1446,6 +1626,9 @@ function App() {
 
       if (replacementList && desiredFormat === 'dashed') {
         replacementList.classList.add('note-list-dashed')
+      }
+      if (replacementList && desiredFormat === 'checkbox') {
+        replacementList.classList.add('note-list-checkbox')
       }
       if (replacementList instanceof HTMLOListElement) {
         replacementList.start = 1
@@ -1469,7 +1652,17 @@ function App() {
       if (beforeList.childNodes.length > 0) {
         parent.insertBefore(beforeList, containingList)
       }
+      listItem.querySelector(':scope > .note-checkbox-marker')?.remove()
       if (replacementList) {
+        if (desiredFormat === 'checkbox') {
+          const marker = document.createElement('span')
+          marker.className = 'note-checkbox-marker'
+          marker.contentEditable = 'false'
+          marker.setAttribute('role', 'checkbox')
+          marker.setAttribute('aria-checked', listItem.dataset.checked === 'true' ? 'true' : 'false')
+          marker.tabIndex = 0
+          listItem.prepend(marker)
+        }
         replacementList.append(listItem)
         parent.insertBefore(replacementList, containingList)
       } else {
@@ -1509,6 +1702,12 @@ function App() {
         : newAnchor?.parentElement?.closest('ul, ol')
       if (newList && format === 'dashed') {
         newList.classList.add('note-list-dashed')
+      }
+      if (newList && format === 'checkbox') {
+        newList.classList.add('note-list-checkbox')
+        if (richTextEditorRef.current) {
+          normalizeEditorLists(richTextEditorRef.current)
+        }
       }
     }
 
@@ -1721,13 +1920,16 @@ function App() {
 
   const handleSignOut = async () => {
     if (supabase && isSupabaseConfigured) {
-      const { error } = await supabase.auth.signOut()
+      const { error } = await supabase.auth.signOut({ scope: 'local' })
       if (error) {
         setAuthError(error.message)
         return
       }
     }
 
+    void db.settings.delete(DEVICE_USER_SETTING_KEY).catch((error: unknown) => {
+      console.error('Unable to clear the device account', error)
+    })
     setCurrentUser(null)
     setEmail('')
     setPassword('')
@@ -1881,7 +2083,6 @@ function App() {
     ? activeNotes.find((note) => note.id === noteMenu.noteId)
     : undefined
   const noteMenuTargetIsLocked = noteMenuTarget?.metadata_json.note_locked === true
-  const noteMenuTargetIsUnlocked = noteMenu ? unlockedNoteIds.has(noteMenu.noteId) : false
 
   return (
     <>
@@ -2282,6 +2483,8 @@ function App() {
                 suppressContentEditableWarning
                 data-placeholder="Write your note..."
                 onInput={persistRichEditorContent}
+                onKeyDown={handleEditorKeyDown}
+                onClick={handleEditorClick}
                 onPaste={handleEditorPaste}
                 onKeyUp={() => {
                   captureEditorSelection()
@@ -2400,6 +2603,15 @@ function App() {
                         >
                           – Dashed
                         </button>
+                        <button
+                          type="button"
+                          aria-label="Checkbox list"
+                          title="Checkbox list"
+                          onMouseDown={(event) => event.preventDefault()}
+                          onClick={() => applyListFormat('checkbox')}
+                        >
+                          ◯ Checklist
+                        </button>
                       </>
                     )}
                   </div>
@@ -2443,14 +2655,6 @@ function App() {
                 </div>
               </div>
 
-              <div className="editor-footer">
-                <span className="meta-label">User:</span>
-                <span>{currentUser?.name ?? DEMO_USER_NAME}</span>
-                <span className="meta-label">Updated:</span>
-                <span>{new Date(selectedNote.updated_at).toLocaleString()}</span>
-                <span className="meta-label">Sync:</span>
-                <span>{selectedNote.sync_status}</span>
-              </div>
             </>
           ) : (
             <div className="empty-editor">
@@ -2500,7 +2704,7 @@ function App() {
               }
               onClick={() => handleNoteMenuActionClick('lock', noteMenu.noteId)}
             >
-              {noteMenuTargetIsLocked && !noteMenuTargetIsUnlocked ? 'Unlock' : 'Lock'}
+              {noteMenuTargetIsLocked ? 'Remove lock' : 'Lock'}
             </button>
             <button
               type="button"
@@ -2569,7 +2773,11 @@ function App() {
               onClick={(event) => event.stopPropagation()}
             >
               <h2 id="note-lock-action-title">
-                {noteLockAction.mode === 'lock' ? 'Lock note' : 'Unlock note'}
+                {noteLockAction.mode === 'lock'
+                  ? 'Lock note'
+                  : noteLockAction.mode === 'remove-lock'
+                    ? 'Remove note lock'
+                    : 'Unlock note'}
               </h2>
               <label htmlFor="note-lock-action-password">Note lock password</label>
               <input
@@ -2592,7 +2800,11 @@ function App() {
                   Cancel
                 </button>
                 <button type="submit" className="primary-button">
-                  {noteLockAction.mode === 'lock' ? 'Lock note' : 'Unlock note'}
+                  {noteLockAction.mode === 'lock'
+                    ? 'Lock note'
+                    : noteLockAction.mode === 'remove-lock'
+                      ? 'Remove lock'
+                      : 'Unlock note'}
                 </button>
               </div>
             </form>

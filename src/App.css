@@ -475,9 +475,7 @@ html[data-theme='dark'] {
 .theme-dark .note-item-meta,
 .theme-dark .note-item-state,
 .theme-dark .empty-state,
-.theme-dark .empty-editor,
-.theme-dark .editor-footer,
-.theme-dark .meta-label {
+.theme-dark .empty-editor {
   color: #e2e8f0;
 }
 
@@ -542,8 +540,7 @@ html[data-theme='dark'] {
   border-bottom: 1px solid #e5e7eb;
 }
 
-.theme-dark .editor-header,
-.theme-dark .editor-footer {
+.theme-dark .editor-header {
   border-color: #334155;
 }
 
@@ -556,6 +553,7 @@ html[data-theme='dark'] {
   color: #111827;
   outline: none;
   background: transparent;
+  caret-color: #f97316;
 }
 
 .theme-dark .editor-header input {
@@ -574,6 +572,7 @@ html[data-theme='dark'] {
   line-height: 1.55;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
+  caret-color: #f97316;
 }
 
 .rich-text-editor:focus {
@@ -595,7 +594,15 @@ html[data-theme='dark'] {
   list-style: none;
 }
 
+.rich-text-editor ul.note-list-checkbox {
+  list-style: none;
+}
+
 .rich-text-editor ul.note-list-dashed > li {
+  position: relative;
+}
+
+.rich-text-editor ul.note-list-checkbox > li {
   position: relative;
 }
 
@@ -603,6 +610,45 @@ html[data-theme='dark'] {
   position: absolute;
   left: -1.2rem;
   content: '–';
+}
+
+.note-checkbox-marker {
+  position: absolute;
+  top: 0.39em;
+  left: -1.35rem;
+  width: 0.9rem;
+  height: 0.9rem;
+  border: 1.5px solid #f97316;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.note-checkbox-marker:hover {
+  box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.16);
+}
+
+.rich-text-editor li[data-checked='true'] {
+  color: #9ca3af;
+}
+
+.theme-dark .rich-text-editor li[data-checked='true'] {
+  color: #64748b;
+}
+
+.rich-text-editor li[data-checked='true'] > .note-checkbox-marker {
+  background: #f97316;
+}
+
+.rich-text-editor li[data-checked='true'] > .note-checkbox-marker::after {
+  position: absolute;
+  top: 0.05rem;
+  left: 0.24rem;
+  width: 0.2rem;
+  height: 0.42rem;
+  border: solid #ffffff;
+  border-width: 0 2px 2px 0;
+  content: '';
+  transform: rotate(45deg);
 }
 
 .theme-dark .rich-text-editor {
@@ -721,21 +767,6 @@ html[data-theme='dark'] {
 
 .theme-dark .editor-toolbar-divider {
   background: #404040;
-}
-
-.editor-footer {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem;
-  padding: 0.75rem 1rem 1rem;
-  color: #4b5563;
-  border-top: 1px solid #e5e7eb;
-  font-size: 0.76rem;
-}
-
-.meta-label {
-  font-weight: 700;
-  color: #111827;
 }
 
 .connection-indicator {
@@ -1576,11 +1607,6 @@ html[data-theme='dark'] {
     padding: 1rem 0.85rem;
   }
 
-  .workspace.note-open .editor-footer {
-    gap: 0.4rem 0.6rem;
-    padding: 0.65rem 0.75rem;
-  }
-
   .sidebar {
     border-right: none;
     border-bottom: 1px solid #e5e7eb;
@@ -1771,8 +1797,6 @@ html[data-theme='light'] {
 .theme-dark .sidebar-header strong,
 .theme-dark .sidebar-header span,
 .theme-dark .eyebrow,
-.theme-dark .editor-footer,
-.theme-dark .meta-label,
 .theme-dark .settings-row,
 .theme-dark .auth-card h1,
 .theme-dark .auth-card .field-label,
@@ -1845,7 +1869,6 @@ html[data-theme='light'] {
 }
 
 .theme-dark .editor-header,
-.theme-dark .editor-footer,
 .theme-dark .sidebar-header {
   border-color: #303030;
 }
