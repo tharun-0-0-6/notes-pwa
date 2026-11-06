@@ -43,6 +43,7 @@ function App() {
   const [currentUser, setCurrentUser] = useState<AppUser | null>(null)
   const [theme, setTheme] = useState<ThemeMode>('light')
   const [noteViewMode, setNoteViewMode] = useState<NoteViewMode>('list')
+  const [settingsOpen, setSettingsOpen] = useState(false)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [authError, setAuthError] = useState<string | null>(null)
@@ -66,6 +67,7 @@ function App() {
   const longPressTimerRef = useRef<number | null>(null)
   const suppressNoteClickRef = useRef(false)
   const contextMenuRef = useRef<HTMLDivElement | null>(null)
+  const settingsMenuRef = useRef<HTMLDetailsElement | null>(null)
   const longPressOriginRef = useRef<{ x: number; y: number } | null>(null)
   const suppressNewNoteClickRef = useRef(false)
   const suppressNewNoteClickTimerRef = useRef<number | null>(null)
@@ -75,6 +77,9 @@ function App() {
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme
+    document
+      .querySelector<HTMLMetaElement>('meta[name="theme-color"]')
+      ?.setAttribute('content', theme === 'dark' ? '#080808' : '#ffffff')
   }, [theme])
 
   const openNoteMenu = (noteId: string, x: number, y: number) => {
@@ -124,6 +129,9 @@ function App() {
     const handlePointerDown = (event: PointerEvent) => {
       if (event.target instanceof Node && !contextMenuRef.current?.contains(event.target)) {
         setNoteMenu(null)
+      }
+      if (event.target instanceof Node && !settingsMenuRef.current?.contains(event.target)) {
+        setSettingsOpen(false)
       }
     }
 
@@ -840,8 +848,21 @@ function App() {
               <option value="grid">▦ Tiles</option>
             </select>
           </label>
-          <details className="settings-menu">
-            <summary aria-label="Settings" title="Settings">
+          <details
+            ref={settingsMenuRef}
+            className="settings-menu"
+            open={settingsOpen}
+            onToggle={(event) => setSettingsOpen(event.currentTarget.open)}
+            onMouseLeave={() => setSettingsOpen(false)}
+          >
+            <summary
+              aria-label="Settings"
+              title="Settings"
+              onClick={(event) => {
+                event.preventDefault()
+                setSettingsOpen((open) => !open)
+              }}
+            >
               <span aria-hidden="true">⚙️</span>
               <span className="settings-label">Settings</span>
             </summary>
@@ -851,7 +872,10 @@ function App() {
                 <button
                   type="button"
                   className="secondary-button theme-icon-button"
-                  onClick={() => void handleThemeToggle()}
+                  onClick={() => {
+                    setSettingsOpen(false)
+                    void handleThemeToggle()
+                  }}
                   aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
                   title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
                 >
@@ -869,7 +893,14 @@ function App() {
                   {online ? '🟢' : '🟠'}
                 </span>
               </div>
-              <button type="button" className="secondary-button settings-sign-out" onClick={handleSignOut}>
+              <button
+                type="button"
+                className="secondary-button settings-sign-out"
+                onClick={() => {
+                  setSettingsOpen(false)
+                  void handleSignOut()
+                }}
+              >
                 Sign out
               </button>
             </div>
@@ -974,8 +1005,10 @@ function App() {
                   type="button"
                   className="danger-button"
                   onClick={() => handleDelete(selectedNote.id)}
+                  aria-label="Delete note"
+                  title="Delete note"
                 >
-                  Delete
+                  🗑️
                 </button>
               </div>
 
@@ -1029,12 +1062,14 @@ function App() {
               type="button"
               role="menuitem"
               className="note-context-delete"
+              aria-label="Delete note"
+              title="Delete note"
               onTouchEnd={(event) =>
                 handleNoteMenuActionTouchEnd(event, 'delete', noteMenu.noteId)
               }
               onClick={() => handleNoteMenuActionClick('delete', noteMenu.noteId)}
             >
-              Delete
+              🗑️
             </button>
           </div>
         ) : null}
