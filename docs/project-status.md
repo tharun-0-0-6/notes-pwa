@@ -65,6 +65,7 @@ This project is now in the implementation baseline phase. The app foundation has
 - locked notes hide tile previews, show locked/unlocked indicators, and require the note password before opening; unlocked state lasts only for the current app session
 - note locking is a visual privacy feature only; note content remains readable in local storage and cloud data and is not encrypted
 - standalone runtime validation passed the production build, lint, and development-server HTTP checks; interactive account flows still need verification with a signed-in test account
+- notes use a sanitized rich-text editor with centered formatting and list toolbars for font sizing, bold/italic/underline, indentation, bullet/number/dash lists, with formatting saved in note content
 - Git repository and origin remote are configured; GitHub CLI is not authenticated in the current environment, and Vercel CLI is unavailable
 
 ### Confirmed direction

@@ -1,13 +1,13 @@
 {
   "planHash": "3f81d987fd26977c11e2eadcaad573ade2800c79c1cefaa21a369222286735ad",
   "phase": "standalone",
-  "recordedAtUtc": "2026-11-06T09:25:57.6170841Z",
+  "recordedAtUtc": "2026-11-06T10:19:14.7981731Z",
   "retryCount": 1,
   "resetBaseline": false,
   "complete": true,
   "result": {
     "setupSucceeded": true,
-    "setupDurationMs": 18130,
+    "setupDurationMs": 13528,
     "setupFailureOutput": null,
     "assertions": [
       {
@@ -19,8 +19,8 @@
         "skipped": false,
         "skippedReason": null,
         "exitCode": 0,
-        "outputSample": "npm warn Unknown env config \u0022scripts-prepend-node-path\u0022. This will stop working in the next major version of npm.\r\n\r\n\u003E notes-website@0.0.0 build\r\n\u003E tsc -b \u0026\u0026 vite build\r\n\r\n\u001B[36mvite v8.3.6 \u001B[32mbuilding client environment for production...\u001B[36m\u001B[39m\r\ntransforming...\r\n\u2713 66 modules transformed.\r\nrendering chunks...\r\ncomputing gzip size...\r\ndist/registerSW.js                0.13 kB\r\ndist/manifest.webmanifest         0.34 kB\r\ndist/index.html                   0.81 kB \u2502 gzip:   0.44 kB\r\ndist/assets/index-Dhk-CyVP.css   25.41 kB \u2502 gzip:   5.60 kB\r\ndist/assets/index-0e2OJBFP.js   576.80 kB \u2502 gzip: 165.12 kB\r\n\r\n\u001B[33m[plugin builtin:vite-reporter] \r\n(!) Some chunks are larger than 500 kB after minification. Consider:\r\n- Using dynamic import() to code-split the application\r\n- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting\r\n- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.\u001B[39m\r\n\u001B[32m\u2713 built in 205ms\u001B[39m\r\n\r\nPWA v2.0.0\r\nmode      generateSW\r\nprecache  6 entries (589.02 KiB)\r\nfiles generated\r\n  dist/sw.js\r\n  dist/workbox-9c191d2f.js\r\n",
-        "durationMs": 2928
+        "outputSample": "npm warn Unknown env config \u0022scripts-prepend-node-path\u0022. This will stop working in the next major version of npm.\r\n\r\n\u003E notes-website@0.0.0 build\r\n\u003E tsc -b \u0026\u0026 vite build\r\n\r\n\u001B[36mvite v8.3.6 \u001B[32mbuilding client environment for production...\u001B[36m\u001B[39m\r\ntransforming...\r\n\u2713 67 modules transformed.\r\nrendering chunks...\r\ncomputing gzip size...\r\ndist/registerSW.js                0.13 kB\r\ndist/manifest.webmanifest         0.34 kB\r\ndist/index.html                   0.81 kB \u2502 gzip:   0.44 kB\r\ndist/assets/index-D5NSc208.css   28.74 kB \u2502 gzip:   6.23 kB\r\ndist/assets/index-UED4ADbC.js   585.47 kB \u2502 gzip: 167.80 kB\r\n\r\n\u001B[33m[plugin builtin:vite-reporter] \r\n(!) Some chunks are larger than 500 kB after minification. Consider:\r\n- Using dynamic import() to code-split the application\r\n- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting\r\n- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.\u001B[39m\r\n\u001B[32m\u2713 built in 184ms\u001B[39m\r\n\r\nPWA v2.0.0\r\nmode      generateSW\r\nprecache  6 entries (600.75 KiB)\r\nfiles generated\r\n  dist/sw.js\r\n  dist/workbox-9c191d2f.js\r\n",
+        "durationMs": 2589
       },
       {
         "name": "lint",
@@ -31,8 +31,8 @@
         "skipped": false,
         "skippedReason": null,
         "exitCode": 0,
-        "outputSample": "npm warn Unknown env config \u0022scripts-prepend-node-path\u0022. This will stop working in the next major version of npm.\r\n\r\n\u003E notes-website@0.0.0 lint\r\n\u003E oxlint\r\n\r\nsrc/App.tsx:296:5: warning react(set-state-in-effect): Calling setState synchronously within an effect can trigger cascading renders help: Effects should synchronize React with external systems. Calling setState synchronously inside an effect starts another render and is usually unnecessary. Derive the value during render, initialize state directly, or update it from the event that caused the change. Use an effect only when synchronizing with an external system.\r\nsrc/App.tsx:353:7: warning react(set-state-in-effect): Calling setState synchronously within an effect can trigger cascading renders help: Effects should synchronize React with external systems. Calling setState synchronously inside an effect starts another render and is usually unnecessary. Derive the value during render, initialize state directly, or update it from the event that caused the change. Use an effect only when synchronizing with an external system.\r\nsrc/App.tsx:409:7: warning react(set-state-in-effect): Calling setState synchronously within an effect can trigger cascading renders help: Effects should synchronize React with external systems. Calling setState synchronously inside an effect starts another render and is usually unnecessary. Derive the value during render, initialize state directly, or update it from the event that caused the change. Use an effect only when synchronizing with an external system.\r\nsrc/App.tsx:425:7: warning react(set-state-in-effect): Calling setState synchronously within an effect can trigger cascading renders help: Effects should synchronize React with external systems. Calling setState synchronously inside an effect starts another render and is usually unnecessary. Derive the value during render, initialize state directly, or update it from the event that caused the change. Use an effect only when synchronizing with an external system.\r\nsrc/App.tsx:575:7: warning react(set-state-in-effect): Calling setState synchronously within an effect can trigger cascading renders help: Effects should synchronize React with external systems. Calling setState synchronously inside an effect starts another render and is usually unnecessary. Derive the value during render, initialize state directly, or update it from the event that caused the change. Use an effect only when synchronizing with an external system.\r\nsrc/App.tsx:256:27: warning react-hooks(exhaustive-deps): The ref\u0027s value \u0060.current\u0060 is accessed directly in the effect cleanup function. help: The ref value will likely have changed by the time this effect cleanup function runs. If this ref points to a node rendered by react, copy it to a variable inside the effect and use that variable in the cleanup function.\r\nsrc/App.tsx:581:21: warning react-hooks(exhaustive-deps): React Hook useEffect has missing dependencies: \u0027selectedNote.title\u0027, \u0027selectedNote.content\u0027, and \u0027selectedNote\u0027 help: Either include it or remove the dependency array.\r\n",
-        "durationMs": 638
+        "outputSample": "npm warn Unknown env config \u0022scripts-prepend-node-path\u0022. This will stop working in the next major version of npm.\r\n\r\n\u003E notes-website@0.0.0 lint\r\n\u003E oxlint\r\n\r\nsrc/App.tsx:330:5: warning react(set-state-in-effect): Calling setState synchronously within an effect can trigger cascading renders help: Effects should synchronize React with external systems. Calling setState synchronously inside an effect starts another render and is usually unnecessary. Derive the value during render, initialize state directly, or update it from the event that caused the change. Use an effect only when synchronizing with an external system.\r\nsrc/App.tsx:387:7: warning react(set-state-in-effect): Calling setState synchronously within an effect can trigger cascading renders help: Effects should synchronize React with external systems. Calling setState synchronously inside an effect starts another render and is usually unnecessary. Derive the value during render, initialize state directly, or update it from the event that caused the change. Use an effect only when synchronizing with an external system.\r\nsrc/App.tsx:443:7: warning react(set-state-in-effect): Calling setState synchronously within an effect can trigger cascading renders help: Effects should synchronize React with external systems. Calling setState synchronously inside an effect starts another render and is usually unnecessary. Derive the value during render, initialize state directly, or update it from the event that caused the change. Use an effect only when synchronizing with an external system.\r\nsrc/App.tsx:459:7: warning react(set-state-in-effect): Calling setState synchronously within an effect can trigger cascading renders help: Effects should synchronize React with external systems. Calling setState synchronously inside an effect starts another render and is usually unnecessary. Derive the value during render, initialize state directly, or update it from the event that caused the change. Use an effect only when synchronizing with an external system.\r\nsrc/App.tsx:609:7: warning react(set-state-in-effect): Calling setState synchronously within an effect can trigger cascading renders help: Effects should synchronize React with external systems. Calling setState synchronously inside an effect starts another render and is usually unnecessary. Derive the value during render, initialize state directly, or update it from the event that caused the change. Use an effect only when synchronizing with an external system.\r\nsrc/App.tsx:290:27: warning react-hooks(exhaustive-deps): The ref\u0027s value \u0060.current\u0060 is accessed directly in the effect cleanup function. help: The ref value will likely have changed by the time this effect cleanup function runs. If this ref points to a node rendered by react, copy it to a variable inside the effect and use that variable in the cleanup function.\r\nsrc/App.tsx:616:21: warning react-hooks(exhaustive-deps): React Hook useEffect has missing dependencies: \u0027selectedNote.title\u0027, and \u0027selectedNote\u0027 help: Either include it or remove the dependency array.\r\nsrc/App.tsx:624:65: warning react-hooks(exhaustive-deps): React Hook useEffect has missing dependencies: \u0027selectedNote.content\u0027, and \u0027selectedNote\u0027 help: Either include it or remove the dependency array.\r\n",
+        "durationMs": 665
       },
       {
         "name": "dev-server-home-200",
@@ -43,8 +43,8 @@
         "skipped": false,
         "skippedReason": null,
         "exitCode": null,
-        "outputSample": "HTTP 200\n\u003C!doctype html\u003E\r\n\u003Chtml lang=\u0022en\u0022 data-theme=\u0022dark\u0022\u003E\r\n  \u003Chead\u003E\n    \u003Cscript type=\u0022module\u0022\u003Eimport { injectIntoGlobalHook } from \u0022/@react-refresh\u0022;\ninjectIntoGlobalHook(window);\nwindow.$RefreshReg$ = () =\u003E {};\nwindow.$RefreshSig$ = () =\u003E (type) =\u003E type;\u003C/script\u003E\n\n    \u003Cscript type=\u0022module\u0022 src=\u0022/@vite/client\u0022\u003E\u003C/script\u003E\n\r\n    \u003Cmeta charset=\u0022UTF-8\u0022 /\u003E\r\n    \u003Clink rel=\u0022icon\u0022 type=\u0022image/svg\u002Bxml\u0022 href=\u0022/favicon.svg\u0022 /\u003E\r\n    \u003Cmeta name=\u0022viewport\u0022 content=\u0022width=device-width, initial-scale=1.0, viewport-fit=cover\u0022 /\u003E\r\n    \u003Cmeta name=\u0022theme-color\u0022 content=\u0022#080808\u0022 /\u003E\r\n    \u003Cmeta\r\n      name=\u0022description\u0022\r\n      content=\u0022Offline-first notes website built for mobile and desktop use.\u0022\r\n    /\u003E\r\n    \u003Ctitle\u003ENotes Website\u003C/title\u003E\r\n  \u003C/head\u003E\r\n  \u003Cbody\u003E\r\n    \u003Cdiv id=\u0022root\u0022\u003E\u003C/div\u003E\r\n    \u003Cscript type=\u0022module\u0022 src=\u0022/src/main.tsx\u0022\u003E\u003C/script\u003E\r\n  \u003C/body\u003E\r\n\u003C/html\u003E\r\n\n--- server output ---\nnpm warn Unknown env config \u0022scripts-prepend-node-path\u0022. This will stop working in the next major version of npm.\r\n\r\n\u003E notes-website@0.0.0 dev\r\n\u003E vite --host 127.0.0.1 --port 4175\r\n\r\n\r\n  \u001B[32m\u001B[1mVITE\u001B[22m v8.3.6\u001B[39m  \u001B[2mready in \u001B[0m\u001B[1m210\u001B[22m\u001B[2m\u001B[0m ms\u001B[22m\r\n\r\n  \u001B[32m\u279C\u001B[39m  \u001B[1mLocal\u001B[22m:   \u001B[36mhttp://127.0.0.1:\u001B[1m4175\u001B[22m/\u001B[39m\r\n",
-        "durationMs": 1049
+        "outputSample": "HTTP 200\n\u003C!doctype html\u003E\r\n\u003Chtml lang=\u0022en\u0022 data-theme=\u0022dark\u0022\u003E\r\n  \u003Chead\u003E\n    \u003Cscript type=\u0022module\u0022\u003Eimport { injectIntoGlobalHook } from \u0022/@react-refresh\u0022;\ninjectIntoGlobalHook(window);\nwindow.$RefreshReg$ = () =\u003E {};\nwindow.$RefreshSig$ = () =\u003E (type) =\u003E type;\u003C/script\u003E\n\n    \u003Cscript type=\u0022module\u0022 src=\u0022/@vite/client\u0022\u003E\u003C/script\u003E\n\r\n    \u003Cmeta charset=\u0022UTF-8\u0022 /\u003E\r\n    \u003Clink rel=\u0022icon\u0022 type=\u0022image/svg\u002Bxml\u0022 href=\u0022/favicon.svg\u0022 /\u003E\r\n    \u003Cmeta name=\u0022viewport\u0022 content=\u0022width=device-width, initial-scale=1.0, viewport-fit=cover\u0022 /\u003E\r\n    \u003Cmeta name=\u0022theme-color\u0022 content=\u0022#080808\u0022 /\u003E\r\n    \u003Cmeta\r\n      name=\u0022description\u0022\r\n      content=\u0022Offline-first notes website built for mobile and desktop use.\u0022\r\n    /\u003E\r\n    \u003Ctitle\u003ENotes Website\u003C/title\u003E\r\n  \u003C/head\u003E\r\n  \u003Cbody\u003E\r\n    \u003Cdiv id=\u0022root\u0022\u003E\u003C/div\u003E\r\n    \u003Cscript type=\u0022module\u0022 src=\u0022/src/main.tsx\u0022\u003E\u003C/script\u003E\r\n  \u003C/body\u003E\r\n\u003C/html\u003E\r\n\n--- server output ---\nnpm warn Unknown env config \u0022scripts-prepend-node-path\u0022. This will stop working in the next major version of npm.\r\n\r\n\u003E notes-website@0.0.0 dev\r\n\u003E vite --host 127.0.0.1 --port 4175\r\n\r\n\r\n  \u001B[32m\u001B[1mVITE\u001B[22m v8.3.6\u001B[39m  \u001B[2mready in \u001B[0m\u001B[1m174\u001B[22m\u001B[2m\u001B[0m ms\u001B[22m\r\n\r\n  \u001B[32m\u279C\u001B[39m  \u001B[1mLocal\u001B[22m:   \u001B[36mhttp://127.0.0.1:\u001B[1m4175\u001B[22m/\u001B[39m\r\n",
+        "durationMs": 524
       }
     ],
     "executions": [
@@ -64,7 +64,7 @@
         "packageManagerExecutable": "F:\\Applications\\Node\\npm.cmd",
         "packageManagerVersion": "11.2.0",
         "cleanup": {
-          "RootProcessId": 31900,
+          "RootProcessId": 21092,
           "Completed": true,
           "ProcessesObserved": 5,
           "ProcessesTerminated": 1,
@@ -93,7 +93,7 @@
         "packageManagerExecutable": "F:\\Applications\\Node\\npm.cmd",
         "packageManagerVersion": "11.2.0",
         "cleanup": {
-          "RootProcessId": 31468,
+          "RootProcessId": 32224,
           "Completed": true,
           "ProcessesObserved": 10,
           "ProcessesTerminated": 5,
@@ -117,7 +117,7 @@
         "packageManagerExecutable": "F:\\Applications\\Node\\npm.cmd",
         "packageManagerVersion": "11.2.0",
         "cleanup": {
-          "RootProcessId": 8380,
+          "RootProcessId": 31860,
           "Completed": true,
           "ProcessesObserved": 14,
           "ProcessesTerminated": 1,
@@ -141,7 +141,7 @@
         "packageManagerExecutable": "F:\\Applications\\Node\\npm.cmd",
         "packageManagerVersion": "11.2.0",
         "cleanup": {
-          "RootProcessId": 31948,
+          "RootProcessId": 32448,
           "Completed": true,
           "ProcessesObserved": 7,
           "ProcessesTerminated": 1,
@@ -170,7 +170,7 @@
         "packageManagerExecutable": "F:\\Applications\\Node\\npm.cmd",
         "packageManagerVersion": "11.2.0",
         "cleanup": {
-          "RootProcessId": 29512,
+          "RootProcessId": 15312,
           "Completed": true,
           "ProcessesObserved": 10,
           "ProcessesTerminated": 5,

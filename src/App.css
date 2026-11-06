@@ -331,6 +331,7 @@ html[data-theme='dark'] {
 }
 
 .note-list.grid-view .note-item {
+  position: relative;
   min-height: 160px;
 }
 
@@ -411,8 +412,43 @@ html[data-theme='dark'] {
 
 .note-lock-indicator {
   flex: 0 0 auto;
-  font-size: 0.9rem;
-  line-height: 1.25;
+  display: inline-flex;
+  width: 1rem;
+  height: 1.2rem;
+  align-items: center;
+  justify-content: center;
+  color: #777777;
+}
+
+.note-lock-indicator svg {
+  width: 0.9rem;
+  height: 1.1rem;
+}
+
+.note-item-preview.note-locked-tile-icon {
+  position: absolute;
+  z-index: 1;
+  top: 50%;
+  left: 50%;
+  display: grid;
+  width: 100%;
+  height: 100%;
+  place-items: center;
+  overflow: visible;
+  color: #99999d;
+  font-size: 1rem;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.note-locked-tile-icon svg {
+  width: clamp(3.75rem, 28%, 5rem);
+  height: clamp(4.5rem, 55%, 6rem);
+}
+
+.theme-dark .note-lock-indicator,
+.theme-dark .note-locked-tile-icon {
+  color: #a1a1a6;
 }
 
 .note-item.is-moving {
@@ -526,21 +562,165 @@ html[data-theme='dark'] {
   color: #f8fafc;
 }
 
-.editor-panel textarea {
+.rich-text-editor {
   flex: 1;
   width: 100%;
-  border: none;
-  resize: none;
-  outline: none;
+  min-height: 320px;
+  overflow: auto;
   padding: 1.25rem 1rem;
   font: inherit;
   background: transparent;
   color: #1f2937;
-  min-height: 320px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
 }
 
-.theme-dark .editor-panel textarea {
+.rich-text-editor:focus {
+  outline: none;
+}
+
+.rich-text-editor:empty::before {
+  color: #9ca3af;
+  content: attr(data-placeholder);
+  pointer-events: none;
+}
+
+.rich-text-editor ul,
+.rich-text-editor ol {
+  padding-left: 1.7rem;
+}
+
+.rich-text-editor ul.note-list-dashed {
+  list-style: none;
+}
+
+.rich-text-editor ul.note-list-dashed > li {
+  position: relative;
+}
+
+.rich-text-editor ul.note-list-dashed > li::before {
+  position: absolute;
+  left: -1.2rem;
+  content: '–';
+}
+
+.theme-dark .rich-text-editor {
   color: #e2e8f0;
+}
+
+.theme-dark .rich-text-editor:empty::before {
+  color: #737373;
+}
+
+.editor-format-toolbar {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  min-height: 3.5rem;
+  align-items: center;
+  justify-content: center;
+  padding: 0.35rem 1rem;
+}
+
+.editor-format-buttons {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  background: #ffffff;
+  box-shadow: 0 5px 18px rgba(0, 0, 0, 0.12);
+}
+
+.editor-format-buttons button,
+.editor-format-options button {
+  display: inline-grid;
+  min-width: 2.4rem;
+  min-height: 2.4rem;
+  place-items: center;
+  padding: 0.35rem 0.55rem;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: #1f2937;
+  font: inherit;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.editor-format-buttons button:hover,
+.editor-format-options button:hover,
+.editor-format-options button[aria-pressed='true'] {
+  background: #fff0df;
+  color: #9a4f00;
+}
+
+.editor-format-buttons button.is-active {
+  background: #fff0df;
+  color: #9a4f00;
+}
+
+.editor-format-buttons svg {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+.editor-format-options {
+  position: absolute;
+  bottom: calc(100% - 0.25rem);
+  left: 50%;
+  display: flex;
+  max-width: calc(100vw - 1.5rem);
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  padding: 0.4rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 13px;
+  background: #ffffff;
+  box-shadow: 0 8px 26px rgba(0, 0, 0, 0.16);
+  transform: translateX(-50%);
+}
+
+.editor-format-options .format-italic {
+  font-style: italic;
+}
+
+.editor-format-options .format-underline {
+  text-decoration: underline;
+}
+
+.editor-toolbar-divider {
+  width: 1px;
+  height: 1.6rem;
+  margin: 0 0.15rem;
+  background: #e5e7eb;
+}
+
+.theme-dark .editor-format-buttons,
+.theme-dark .editor-format-options {
+  border-color: #3a3a3a;
+  background: #171717;
+}
+
+.theme-dark .editor-format-buttons button,
+.theme-dark .editor-format-options button {
+  color: #f5f5f5;
+}
+
+.theme-dark .editor-format-buttons button:hover,
+.theme-dark .editor-format-options button:hover,
+.theme-dark .editor-format-options button[aria-pressed='true'],
+.theme-dark .editor-format-buttons button.is-active {
+  background: #38230f;
+  color: #ffb45c;
+}
+
+.theme-dark .editor-toolbar-divider {
+  background: #404040;
 }
 
 .editor-footer {
@@ -1056,13 +1236,43 @@ html[data-theme='dark'] {
 
 .theme-dark .view-select,
 .theme-dark .sort-select {
-  border-color: #334155;
-  background: #0f172a;
-  color: #e2e8f0;
+  border-color: #404040;
+  background: #21160c;
+  color: #ffb45c;
+}
+
+.theme-dark .sort-select-wrap::after {
+  color: #ffb45c;
+}
+
+.theme-dark .sort-select option {
+  background: #121212;
+  color: #ffb45c;
+}
+
+.theme-light .sort-select option {
+  background: #ffffff;
+  color: #1f2937;
+}
+
+.sort-select:focus-visible {
+  border-color: #ff8a00;
+  outline: 2px solid rgba(255, 138, 0, 0.35);
+  outline-offset: 2px;
 }
 
 .editor-back {
   display: none;
+}
+
+.editor-back-icon {
+  width: 1.5rem;
+  height: 1.5rem;
+  color: #111111;
+}
+
+.theme-dark .editor-back-icon {
+  color: #ffffff;
 }
 
 .mobile-new-note {
@@ -1361,7 +1571,7 @@ html[data-theme='dark'] {
     margin-left: auto;
   }
 
-  .workspace.note-open .editor-panel textarea {
+  .workspace.note-open .rich-text-editor {
     min-height: 0;
     padding: 1rem 0.85rem;
   }
@@ -1542,8 +1752,6 @@ html[data-theme='light'] {
 
 .theme-dark .note-item,
 .theme-dark .field-label input,
-.theme-dark .editor-header input,
-.theme-dark .editor-panel textarea,
 .theme-dark .rename-dialog input {
   border-color: #3a3a3a;
   background: #151515;
@@ -1654,11 +1862,17 @@ html[data-theme='light'] {
 
 .theme-dark button:focus-visible,
 .theme-dark input:focus-visible,
-.theme-dark textarea:focus-visible,
 .note-context-menu.theme-dark button:focus-visible,
 .rename-dialog.theme-dark input:focus-visible {
   outline: 2px solid #737373;
   outline-offset: 2px;
+}
+
+.editor-header input:focus-visible,
+.theme-dark .editor-header input:focus-visible,
+.rich-text-editor:focus-visible {
+  outline: none;
+  box-shadow: none;
 }
 
 .theme-dark .danger-button {
@@ -1683,6 +1897,63 @@ html[data-theme='light'] {
 }
 
 @media (max-width: 820px) {
+  .workspace.note-open .editor-format-toolbar {
+    position: fixed;
+    right: 0;
+    bottom: max(var(--mobile-keyboard-inset, 0px), env(safe-area-inset-bottom, 0px));
+    left: 0;
+    z-index: 20;
+    min-height: 3rem;
+    padding: 0.15rem 0.5rem;
+    background: transparent;
+    pointer-events: none;
+  }
+
+  .workspace.note-open .editor-format-buttons,
+  .workspace.note-open .editor-format-options {
+    pointer-events: auto;
+  }
+
+  .workspace.note-open .editor-format-options {
+    position: fixed;
+    bottom: calc(
+      max(var(--mobile-keyboard-inset, 0px), env(safe-area-inset-bottom, 0px)) +
+      3rem
+    );
+    left: 0.5rem;
+    display: flex;
+    width: calc(100vw - 1rem);
+    max-width: none;
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    overflow-x: auto;
+    overflow-y: hidden;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+    touch-action: pan-x;
+    transform: none;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .workspace.note-open .editor-format-options::-webkit-scrollbar {
+    display: none;
+    width: 0;
+    height: 0;
+  }
+
+  .workspace.note-open .editor-format-options button {
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+
+  .workspace.note-open .editor-format-options .editor-toolbar-divider {
+    flex: 0 0 1px;
+  }
+
+  .workspace.note-open .rich-text-editor {
+    padding-bottom: 5.25rem;
+  }
+
   html,
   body,
   #root,
