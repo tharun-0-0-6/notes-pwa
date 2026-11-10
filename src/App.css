@@ -117,6 +117,7 @@
 }
 
 .app-shell {
+  position: relative;
   height: 100vh;
   height: 100dvh;
   overflow: hidden;
@@ -256,6 +257,10 @@ button:not(:disabled):active,
 .editor-format-options button:active {
   transform: scale(0.97) !important;
   filter: brightness(0.97);
+}
+
+.app-shell > .mobile-new-note {
+  position: absolute;
 }
 
 .workspace.note-open .editor-back:active {
@@ -575,6 +580,7 @@ button:not(:disabled):active,
 }
 
 .editor-panel {
+  position: relative;
   display: flex;
   flex-direction: column;
   min-width: 0;
@@ -603,6 +609,7 @@ button:not(:disabled):active,
 .editor-header input {
   flex: 1;
   min-width: 0;
+  padding-right: 7rem;
   border: none;
   font-size: clamp(1.3rem, 2vw, 2rem);
   font-weight: 700;
@@ -721,13 +728,15 @@ button:not(:disabled):active,
 }
 
 .editor-format-toolbar {
-  position: relative;
-  z-index: 2;
+  position: absolute;
+  top: 0.45rem;
+  right: 4.35rem;
+  z-index: 5;
   display: flex;
-  min-height: 3.5rem;
+  min-height: 0;
   align-items: center;
-  justify-content: center;
-  padding: 0.35rem 1rem;
+  justify-content: flex-end;
+  padding: 0;
 }
 
 .editor-format-buttons {
@@ -776,20 +785,44 @@ button:not(:disabled):active,
 
 .editor-format-options {
   position: absolute;
-  bottom: calc(100% - 0.25rem);
-  left: 50%;
+  top: calc(100% + 0.35rem);
+  right: -3.85rem;
   display: flex;
   max-width: calc(100vw - 1.5rem);
   flex-wrap: wrap;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 0.25rem;
   padding: 0.4rem;
   border: 1px solid #e5e7eb;
   border-radius: 13px;
   background: #ffffff;
   box-shadow: 0 8px 26px rgba(0, 0, 0, 0.16);
-  transform: translateX(-50%);
+}
+
+.editor-format-options[aria-label="Text formatting"] {
+  display: grid;
+  grid-template-rows: repeat(3, auto);
+  gap: 0.25rem;
+}
+
+.editor-format-options[aria-label="List formatting"] {
+  min-width: 10.5rem;
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.editor-format-options[aria-label="List formatting"] button {
+  width: 100%;
+  justify-content: flex-start;
+  text-align: left;
+}
+
+.editor-format-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
 }
 
 .editor-format-options .format-italic {
@@ -1618,6 +1651,28 @@ button:not(:disabled):active,
 }
 
 @media (max-width: 820px) {
+  @keyframes mobileNoteZoomIn {
+    0% {
+      opacity: 0;
+      transform: scale(0.72);
+    }
+    100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+
+  @keyframes mobileNoteZoomOut {
+    0% {
+      opacity: 1;
+      transform: scale(1);
+    }
+    100% {
+      opacity: 0;
+      transform: scale(0.72);
+    }
+  }
+
   .workspace {
     grid-template-columns: 1fr;
   }
@@ -1651,9 +1706,9 @@ button:not(:disabled):active,
   }
 
   .mobile-new-note {
-    position: fixed;
+    position: absolute;
     right: max(1rem, env(safe-area-inset-right, 0px));
-    bottom: calc(env(safe-area-inset-bottom, 0px) + 1.25rem);
+    bottom: max(1rem, env(safe-area-inset-bottom, 0px));
     z-index: 2147483647;
     display: grid;
     width: 3.5rem;
@@ -1728,12 +1783,12 @@ button:not(:disabled):active,
   }
 
   .workspace.view-grid.note-open.zoom-origin-ready .editor-panel {
-    animation: noteZoomIn 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    animation: mobileNoteZoomIn 0.32s cubic-bezier(0.16, 1, 0.3, 1) forwards;
     will-change: transform, opacity;
   }
 
   .workspace.view-grid.note-open.zoom-origin-ready.note-closing .editor-panel {
-    animation: noteZoomOut 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    animation: mobileNoteZoomOut 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   }
 
   .topbar-actions .hide-when-note-open {
@@ -2092,16 +2147,15 @@ html[data-theme="light"] {
 
 @media (max-width: 820px) {
   .workspace.note-open .editor-format-toolbar {
-    position: fixed;
-    right: 0;
-    bottom: max(
-      var(--mobile-keyboard-inset, 0px),
-      env(safe-area-inset-bottom, 0px)
-    );
-    left: 0;
+    position: absolute;
+    top: 0.45rem;
+    right: 4.35rem;
+    bottom: auto;
+    left: auto;
     z-index: 20;
-    min-height: 3rem;
-    padding: 0.15rem 0.5rem;
+    width: auto;
+    min-height: 0;
+    padding: 0;
     background: transparent;
     pointer-events: none;
   }
@@ -2112,30 +2166,23 @@ html[data-theme="light"] {
   }
 
   .workspace.note-open .editor-format-options {
-    position: fixed;
-    bottom: calc(
-      max(var(--mobile-keyboard-inset, 0px), env(safe-area-inset-bottom, 0px)) +
-        3rem
-    );
-    left: 0.5rem;
+    position: absolute;
+    top: calc(100% + 0.35rem);
+    right: -3.85rem;
+    bottom: auto;
+    left: auto;
     display: flex;
-    width: calc(100vw - 1rem);
-    max-width: none;
-    flex-wrap: nowrap;
+    width: min(10.5rem, calc(100vw - 1rem));
+    max-width: calc(100vw - 1rem);
+    flex-wrap: wrap;
     justify-content: flex-start;
-    overflow-x: auto;
-    overflow-y: hidden;
-    overscroll-behavior-x: contain;
-    scrollbar-width: none;
-    touch-action: pan-x;
+    overflow: visible;
     transform: none;
-    -webkit-overflow-scrolling: touch;
   }
 
-  .workspace.note-open .editor-format-options::-webkit-scrollbar {
-    display: none;
-    width: 0;
-    height: 0;
+  .workspace.note-open .editor-format-options[aria-label="Text formatting"] {
+    display: grid;
+    grid-template-rows: repeat(3, auto);
   }
 
   .workspace.note-open .editor-format-options button {
@@ -2148,7 +2195,7 @@ html[data-theme="light"] {
   }
 
   .workspace.note-open .rich-text-editor {
-    padding-bottom: 5.25rem;
+    padding-bottom: 1.5rem;
   }
 
   html,

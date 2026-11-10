@@ -1683,6 +1683,94 @@ function App() {
     }
   };
 
+  const convertEmptyListSuffixToParagraphs = (editor: HTMLDivElement) => {
+    const selection = window.getSelection();
+    if (!selection?.rangeCount || !selection.isCollapsed) {
+      return false;
+    }
+
+    const range = selection.getRangeAt(0);
+    const anchor = range.startContainer;
+    const listItem =
+      anchor instanceof Element
+        ? anchor.closest("li")
+        : anchor.parentElement?.closest("li");
+    const list = listItem?.parentElement;
+    if (
+      !(listItem instanceof HTMLLIElement) ||
+      !(list instanceof HTMLOListElement || list instanceof HTMLUListElement) ||
+      !editor.contains(listItem) ||
+      listItem.textContent?.trim()
+    ) {
+      return false;
+    }
+
+    const listItems = Array.from(list.children).filter(
+      (child): child is HTMLLIElement => child instanceof HTMLLIElement,
+    );
+    const itemIndex = listItems.indexOf(listItem);
+    const marker = listItem.querySelector(":scope > .note-checkbox-marker");
+    const firstContentNode = Array.from(listItem.childNodes).find(
+      (node) => node !== marker,
+    );
+    const itemStart = document.createRange();
+    if (firstContentNode?.nodeType === Node.TEXT_NODE) {
+      itemStart.setStart(firstContentNode, 0);
+    } else if (firstContentNode) {
+      itemStart.setStartBefore(firstContentNode);
+    } else if (marker) {
+      itemStart.setStartAfter(marker);
+    } else {
+      itemStart.setStart(listItem, 0);
+    }
+    itemStart.collapse(true);
+
+    if (
+      itemIndex < 0 ||
+      range.compareBoundaryPoints(Range.START_TO_START, itemStart) > 0
+    ) {
+      return false;
+    }
+
+    const parent = list.parentNode;
+    if (!parent) {
+      return false;
+    }
+
+    let firstParagraph: HTMLParagraphElement | null = null;
+    const insertionPoint = list.nextSibling;
+    for (const item of listItems.slice(itemIndex)) {
+      item.querySelector(":scope > .note-checkbox-marker")?.remove();
+      item.removeAttribute("data-checked");
+      const paragraph = document.createElement("p");
+      while (item.firstChild) {
+        paragraph.append(item.firstChild);
+      }
+      if (!paragraph.hasChildNodes()) {
+        paragraph.append(document.createElement("br"));
+      }
+      if (item === listItem) {
+        firstParagraph = paragraph;
+      }
+      item.remove();
+      parent.insertBefore(paragraph, insertionPoint);
+    }
+
+    if (!list.querySelector(":scope > li")) {
+      list.remove();
+    }
+
+    if (!firstParagraph) {
+      return false;
+    }
+    const caret = document.createRange();
+    caret.setStart(firstParagraph, 0);
+    caret.collapse(true);
+    selection.removeAllRanges();
+    selection.addRange(caret);
+    return true;
+  };
+
   const restoreEditorSelection = () => {
     const editor = richTextEditorRef.current;
     const range = editorSelectionRangeRef.current;
@@ -1730,6 +1818,16 @@ function App() {
   };
 
   const handleEditorKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (
+      (event.key === "Backspace" || event.key === "Enter") &&
+      richTextEditorRef.current &&
+      convertEmptyListSuffixToParagraphs(richTextEditorRef.current)
+    ) {
+      event.preventDefault();
+      persistRichEditorContent();
+      return;
+    }
+
     if (event.key === " " && event.target instanceof Element) {
       const marker = event.target.closest(".note-checkbox-marker");
       const listItem = marker?.closest("li");
@@ -2024,6 +2122,17 @@ function App() {
         if (richTextEditorRef.current) {
           normalizeEditorLists(richTextEditorRef.current);
         }
+      }
+      if (
+        selectionRange &&
+        richTextEditorRef.current?.contains(
+          selectionRange.commonAncestorContainer,
+        )
+      ) {
+        selection?.removeAllRanges();
+        selection?.addRange(selectionRange);
+      }
+      if (newList && format === "checkbox") {
         const newAnchor = window.getSelection()?.anchorNode;
         const newListItem =
           newAnchor instanceof Element
@@ -2453,7 +2562,6 @@ function App() {
       >
         <header className="topbar">
           <div>
-            <p className="eyebrow">Offline-first notes</p>
             <h1>
               {selectedFolderId
                 ? (folderNameById.get(selectedFolderId) ?? "General Notes")
@@ -2970,75 +3078,79 @@ function App() {
                     >
                       {editorToolbarPanel === "text" ? (
                         <>
-                          <button
-                            type="button"
-                            aria-label="Decrease font size"
-                            title="Decrease font size"
-                            onMouseDown={(event) => event.preventDefault()}
-                            onClick={() => {
-                              changeEditorFontSize(-1);
-                            }}
-                          >
-                            A−
-                          </button>
-                          <button
-                            type="button"
-                            aria-label="Increase font size"
-                            title="Increase font size"
-                            onMouseDown={(event) => event.preventDefault()}
-                            onClick={() => {
-                              changeEditorFontSize(1);
-                            }}
-                          >
-                            A+
-                          </button>
-                          <span className="editor-toolbar-divider" />
-                          {(
-                            [
-                              ["bold", "Bold", "B"],
-                              ["italic", "Italic", "I"],
-                              ["underline", "Underline", "U"],
-                            ] as const
-                          ).map(([format, label, icon]) => (
+                          <div className="editor-format-row">
                             <button
                               type="button"
-                              key={format}
-                              className={`format-${format}`}
-                              aria-label={label}
-                              title={label}
-                              aria-pressed={activeInlineFormats[format]}
+                              aria-label="Decrease font size"
+                              title="Decrease font size"
                               onMouseDown={(event) => event.preventDefault()}
                               onClick={() => {
-                                applyEditorCommand(format);
-                                setEditorToolbarPanel(null);
+                                changeEditorFontSize(-1);
                               }}
                             >
-                              {icon}
+                              A−
                             </button>
-                          ))}
-                          <span className="editor-toolbar-divider" />
-                          <button
-                            type="button"
-                            aria-label="Decrease indent"
-                            title="Decrease indent"
-                            onMouseDown={(event) => event.preventDefault()}
-                            onClick={() => {
-                              applyEditorCommand("outdent");
-                            }}
-                          >
-                            ⇤
-                          </button>
-                          <button
-                            type="button"
-                            aria-label="Increase indent"
-                            title="Increase indent"
-                            onMouseDown={(event) => event.preventDefault()}
-                            onClick={() => {
-                              applyEditorCommand("indent");
-                            }}
-                          >
-                            ⇥
-                          </button>
+                            <button
+                              type="button"
+                              aria-label="Increase font size"
+                              title="Increase font size"
+                              onMouseDown={(event) => event.preventDefault()}
+                              onClick={() => {
+                                changeEditorFontSize(1);
+                              }}
+                            >
+                              A+
+                            </button>
+                          </div>
+                          <div className="editor-format-row">
+                            {(
+                              [
+                                ["bold", "Bold", "B"],
+                                ["italic", "Italic", "I"],
+                                ["underline", "Underline", "U"],
+                              ] as const
+                            ).map(([format, label, icon]) => (
+                              <button
+                                type="button"
+                                key={format}
+                                className={`format-${format}`}
+                                aria-label={label}
+                                title={label}
+                                aria-pressed={activeInlineFormats[format]}
+                                onMouseDown={(event) => event.preventDefault()}
+                                onClick={() => {
+                                  applyEditorCommand(format);
+                                  setEditorToolbarPanel(null);
+                                }}
+                              >
+                                {icon}
+                              </button>
+                            ))}
+                          </div>
+                          <div className="editor-format-row">
+                            <button
+                              type="button"
+                              aria-label="Decrease indent"
+                              title="Decrease indent"
+                              onMouseDown={(event) => event.preventDefault()}
+                              onClick={() => {
+                                applyEditorCommand("outdent");
+                              }}
+                            >
+                              ⇤
+                            </button>
+                            <button
+                              type="button"
+                              aria-label="Increase indent"
+                              title="Increase indent"
+                              onMouseDown={(event) => event.preventDefault()}
+                              onClick={() => {
+                                applyEditorCommand("indent");
+                              }}
+                            >
+                              ⇥
+                            </button>
+                          </div>
                         </>
                       ) : (
                         <>
@@ -3142,6 +3254,16 @@ function App() {
             )}
           </main>
         </div>
+        <button
+          type="button"
+          className={`mobile-new-note ${themeClassName} ${selectedNote ? "is-hidden" : ""}`}
+          onTouchEnd={handleNewNoteTouchEnd}
+          onClick={handleNewNoteClick}
+          aria-label="Create a new note"
+          title="Create a new note"
+        >
+          +
+        </button>
       </div>
       {createPortal(
         <>
@@ -3426,16 +3548,6 @@ function App() {
               </form>
             </div>
           ) : null}
-          <button
-            type="button"
-            className={`mobile-new-note ${themeClassName} ${selectedNote ? "is-hidden" : ""}`}
-            onTouchEnd={handleNewNoteTouchEnd}
-            onClick={handleNewNoteClick}
-            aria-label="Create a new note"
-            title="Create a new note"
-          >
-            +
-          </button>
         </>,
         document.body,
       )}
