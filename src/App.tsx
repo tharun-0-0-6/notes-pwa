@@ -1771,6 +1771,66 @@ function App() {
     return true;
   };
 
+  const convertTypedNumberToList = (editor: HTMLDivElement) => {
+    const selection = window.getSelection();
+    if (!selection?.rangeCount || !selection.isCollapsed) {
+      return false;
+    }
+
+    const range = selection.getRangeAt(0);
+    const anchor = range.startContainer;
+    const block =
+      anchor instanceof Element
+        ? anchor.closest("p, div")
+        : anchor.parentElement?.closest("p, div");
+    const line = block ?? (editor.contains(anchor) ? editor : null);
+    if (
+      !line ||
+      line !== editor && line.closest("li") ||
+      !editor.contains(anchor) ||
+      !line.contains(anchor)
+    ) {
+      return false;
+    }
+
+    const lineText = line.textContent ?? "";
+    const match = /^(\d+)\.$/.exec(lineText);
+    if (!match) {
+      return false;
+    }
+
+    const textBeforeCaret = document.createRange();
+    textBeforeCaret.selectNodeContents(line);
+    textBeforeCaret.setEnd(range.endContainer, range.endOffset);
+    if (textBeforeCaret.toString() !== lineText) {
+      return false;
+    }
+
+    const orderedList = document.createElement("ol");
+    orderedList.setAttribute("start", match[1]);
+    const listItem = document.createElement("li");
+    listItem.append(document.createElement("br"));
+    orderedList.append(listItem);
+
+    if (line === editor) {
+      editor.replaceChildren(orderedList);
+    } else {
+      const parent = line.parentNode;
+      if (!parent) {
+        return false;
+      }
+      parent.insertBefore(orderedList, line);
+      line.remove();
+    }
+
+    const caret = document.createRange();
+    caret.setStart(listItem, 0);
+    caret.collapse(true);
+    selection.removeAllRanges();
+    selection.addRange(caret);
+    return true;
+  };
+
   const restoreEditorSelection = () => {
     const editor = richTextEditorRef.current;
     const range = editorSelectionRangeRef.current;
@@ -1822,6 +1882,16 @@ function App() {
       (event.key === "Backspace" || event.key === "Enter") &&
       richTextEditorRef.current &&
       convertEmptyListSuffixToParagraphs(richTextEditorRef.current)
+    ) {
+      event.preventDefault();
+      persistRichEditorContent();
+      return;
+    }
+
+    if (
+      event.key === " " &&
+      richTextEditorRef.current &&
+      convertTypedNumberToList(richTextEditorRef.current)
     ) {
       event.preventDefault();
       persistRichEditorContent();
